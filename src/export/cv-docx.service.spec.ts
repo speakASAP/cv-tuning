@@ -25,4 +25,12 @@ describe('CvDocxService', () => {
   it('propagates a parse failure rather than emitting a blank document', async () => {
     await expect(new CvDocxService().render('   ', 'x')).rejects.toThrow(/empty/i);
   });
+
+  it('renders a name pdfkit\'s Helvetica cannot encode correctly (documents the PDF/DOCX asymmetry)', async () => {
+    const CV_CJK_NAME = '# 王小明\n\n## Experience\n### Dev — Acme (2020)\n- Ran PostgreSQL';
+    const { content } = await new CvDocxService().render(CV_CJK_NAME, 'x');
+    const xml = new AdmZip(content).readAsText('word/document.xml');
+    expect(xml).toContain('王小明');
+    expect(xml).toContain('Ran PostgreSQL');
+  });
 });

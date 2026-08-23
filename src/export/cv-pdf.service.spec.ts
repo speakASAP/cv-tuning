@@ -69,4 +69,11 @@ describe('CvPdfService', () => {
   it('propagates a parse failure rather than emitting a blank PDF', async () => {
     await expect(new CvPdfService().render('   ', 'x')).rejects.toThrow(/empty/i);
   });
+
+  it('raises rather than silently corrupting a name pdfkit\'s font cannot encode', async () => {
+    const CV_CJK_NAME = '# 王小明\n\n## Experience\n### Dev — Acme (2020)\n- Ran PostgreSQL';
+    await expect(new CvPdfService().render(CV_CJK_NAME, 'x')).rejects.toThrow(
+      /does not yet support these characters.*王.*export DOCX instead/is,
+    );
+  });
 });
