@@ -5,7 +5,9 @@ a CV tailored to each position — reviewed as a git-style diff, revised through
 AI conversation, approved by the human, then downloaded as PDF and DOCX and tracked to
 outcome.
 
-**Port:** 3379 · **Domain:** `cv.alfares.cz` *(planned)* · **Status:** design only, no code yet
+**Port:** 3379 · **Domain:** `cv.alfares.cz` *(planned)* · **Status:** Phase 4 done (master CV
+import, tailoring, revision loop, approval gate, PDF/DOCX export) · Phase 5 next · owner-only,
+no third-party users until Phase 7 (GDPR)
 
 ## Why this is not "generate a CV with AI"
 

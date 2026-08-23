@@ -39,8 +39,13 @@ rtk npx ts-node src/applications/__evals__/run-eval.ts   # needs CV_AI_SERVICE_U
 ```
 
 Run it before and after any edit to `tailor.prompt.ts` or `entail.prompt.ts` and diff the
-tables — it is the only regression net for prompt changes. No baseline is recorded yet
-(see `STATE.json.openItems`).
+tables — it is the only regression net for prompt changes. No baseline is recorded yet: the
+2026-08-23 attempt against the live ai-microservice errored on all 7 fixtures because that
+deployment returns `model_used: "smart"` (a tier name, not a real model id), which
+`ai-client.service.ts:127` correctly flags as degraded — `TailorService`/`ReviseService` then
+correctly refuse the completion (spec §8.1). That's the anti-fabrication guard working as
+intended, not an eval-harness bug, but it means the baseline is still blocked on an
+ai-microservice fix (see `STATE.json.openItems`).
 
 ## Architecture
 
@@ -77,6 +82,37 @@ independent grounding layers (spec §6):
 
 Plus two deterministic, dependency-free checks: `ai-tell.ts` (phrases AI-content classifiers
 key on) and `diff.ts` (hand-rolled word-level LCS diff — the input is a CV, so O(n·m) is free).
+
+**Revision loop (Phase 4, spec §7)** — `revise.service.ts` + `revise.prompt.ts` behind
+`POST :id/revise` and `GET :id/chat`. Revision runs through the same two-layer grounding as
+initial tailoring: a revised bullet is still constrained generation, still entailment-checked,
+still dropped rather than shown if it fails. The rate limit is durable and DB-backed, not
+in-memory, because a restart must not reset a user's quota. `ReviseService` refuses a
+completion served by an unexpected model for the same reason `TailorService` does (spec §8.1)
+— the anti-fabrication guarantee has to hold on every call in the pipeline, not just the first.
+
+**Approval gate (Phase 4, spec §7)** — `confirmClaim` lets the user resolve individual
+`overreach` verdicts from the entailment validator; `approve` is blocked while any bullet has
+an unresolved `overreach` verdict, and is guarded to only fire from `state === 'in_review'` so
+an already-approved or already-exported application can't be re-approved into an inconsistent
+state. Note: `TailoredBullet` has no stable id (identity is text-string equality), so two
+`overreach` bullets with identical text in one render are indistinguishable to `confirmClaim`
+— tracked in `STATE.json.openItems`.
+
+**export/ (Phase 4)** — one model, two writers, spec §6.3. `cv-document.ts` defines a single
+document model that `cv-pdf.service.ts` and `cv-docx.service.ts` both render from, so PDF and
+DOCX can never diverge in content, only in format. Artifacts are written to MinIO and served
+through a download endpoint that 404s on a missing artifact and never silently regenerates one
+— a regenerated file could differ from what the user actually approved. `CvPdfService` raises
+on any character pdfkit's built-in Helvetica can't encode (CJK, emoji, Arabic — Helvetica is
+WinAnsi-only) rather than corrupt the output, and points the caller at DOCX, which renders
+those characters correctly; real embedded-font Unicode support is deferred (needs a TTF, a
+licence decision, and a Docker image change). `info.CreationDate` is pinned to `new Date(0)`
+because pdfkit hashes it into the PDF `/ID` trailer, and spec §6.3 reuses that sha256 for
+artifact idempotency — an unpinned CreationDate would make the hash wall-clock dependent.
+Phase 4 exports a name plus one honest "Tailored Highlights" section, not a full multi-section
+CV with per-entry org/period — that needs facts to carry section/org/period explicitly, or the
+master CV to be parsed structurally at import (top Phase 5 candidate).
 
 **Immutability rule (spec §4.2):** `cv_application.master_version_id` pins an immutable
 master snapshot and never follows `is_current`; `cv_render.facts_snapshot` stores the facts

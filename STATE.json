@@ -1,7 +1,7 @@
 {
   "service": "cv-tuning",
   "port": 3379,
-  "updated": "2026-08-23",
+  "updated": "2026-08-24",
   "branch": "main",
   "lastCommit": "a63a79f",
   "gate": "No third-party users before Phase 7 (GDPR). Phases 1-6 run on owner's own CV data only.",
@@ -25,11 +25,11 @@
       "what": "Tailoring (constrained generation) + entailment validator + ai-tell + word-level diff + eval harness"
     },
     "4": {
-      "status": "next",
+      "status": "done",
       "what": "Voice revision loop, approve, PDF/DOCX export"
     },
     "5": {
-      "status": "todo",
+      "status": "next",
       "what": "Dashboard, outcome tracking, notification nudges"
     },
     "6": {
@@ -54,10 +54,12 @@
     }
   },
   "tests": {
-    "suites": 21,
-    "cases": 224,
+    "suites": 31,
+    "cases": 304,
+    "passed": 293,
+    "skipped": 11,
     "command": "npm test",
-    "note": "11 skipped are integration tests needing a live Postgres"
+    "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
   },
   "docs": {
     "spec": "docs/specs/2026-08-22-cv-tailoring-platform-design.md",
@@ -66,13 +68,20 @@
   "openItems": [
     "JWKS exception request for local token verification (spec 3.2)",
     "Model benchmark (Phase 8) gates premium and all pricing",
-    "Phase 3 eval harness has no recorded baseline yet: run src/applications/__evals__/run-eval.ts against a live ai-microservice and record the table before the next prompt edit."
+    "Phase 3 eval harness has no recorded baseline yet: run src/applications/__evals__/run-eval.ts against a live ai-microservice and record the table before the next prompt edit. Attempted 2026-08-23 against the live ai-microservice: all 7 fixtures errored, but for an upstream reason, not a harness bug. The deployed ai-microservice returns model_used: \"smart\" (the tier name) instead of a real model id; ai-client.service.ts:127 correctly flags that as degraded, and ReviseService/TailorService correctly refuse to use a degraded completion (spec \u00a78.1 anti-fabrication guard working as designed). This is an INTEGRATION defect between cv-tuning and ai-microservice, owned outside this plan, and the baseline is still unrecorded. Two resolution options: (a) fix ai-microservice to report the real upstream model id (preferred), or (b) add \"smart\" to EXPECTED_MODELS in cv-tuning \u2014 but (b) weakens the degraded-detection guard spec \u00a78.1 relies on, so it is a real decision, not a config tweak.",
+    "linkedin.importer.ts#toMarkdown violates the H1-name convention by construction: it emits `# Experience`/`# Skills` with no name heading, so a LinkedIn-imported user hits MissingMasterNameError on their first generate(). Fix belongs in the importer (LinkedIn export data carries the name) or at onboarding \u2014 not by loosening the generate-time check.",
+    "Phase 4 export produces a name + ONE honest section (\"Tailored Highlights\"), not a full multi-section CV. Full reconstruction with real per-entry org/period needs a schema change: facts must carry section/org/period explicitly, or the master CV must be parsed structurally at import. Top Phase 5 candidate.",
+    "No retry path after an export failure at approve: the application sits `approved` with `stateError` and cannot be re-approved (the state guard rejects non-in_review). Phase 5 candidate.",
+    "Bullet identity is text-string equality only \u2014 TailoredBullet has no stable id, so two overreach bullets with identical text in one render are indistinguishable to confirmClaim and the approval gate."
   ],
   "traps": [
     "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",
     "git merge does not trigger auto-deploy (post-commit hook only, no post-merge). Batch branches need enqueue.sh or ./scripts/deploy.sh.",
     "AI client timeout must stay above LiteLLM proxy 120s or the fallback chain never runs.",
     "Probe a pod from inside itself via its podIP, not localhost \u2014 the app does not bind loopback.",
-    "No standalone TypeORM data-source: migrations run via migrationsRun at boot. Scratch-DB checks need a direct DataSource script."
+    "No standalone TypeORM data-source: migrations run via migrationsRun at boot. Scratch-DB checks need a direct DataSource script.",
+    "pdf-parse's bundled pdf.js throws inside Jest's node environment for ANY PDF (verified with a bare jest config, no ts-jest or Nest involved). Production is unaffected. cv-pdf.service.spec.ts shells out to a child node process to assert extracted text \u2014 anyone calling pdf-parse live under Jest will hit this.",
+    "pdfkit's built-in Helvetica is WinAnsi-only: CJK, emoji, and Arabic silently corrupt in PDF output. CvPdfService now RAISES on unencodable characters, naming them and pointing at DOCX (which renders them correctly). Real Unicode font support is deferred \u2014 needs an embedded TTF, a licence decision, and a Docker image change.",
+    "pdfkit hashes info.CreationDate into the PDF /ID trailer, so an unpinned CreationDate makes the sha256 wall-clock dependent. It is pinned to new Date(0) because spec \u00a76.3 reuses that sha256 for artifact idempotency."
   ]
 }
