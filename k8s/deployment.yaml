@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cv-tuning
+  namespace: statex-apps
+  labels:
+    app: cv-tuning
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cv-tuning
+  template:
+    metadata:
+      labels:
+        app: cv-tuning
+    spec:
+      containers:
+        - name: app
+          image: localhost:5000/cv-tuning:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3379
+          envFrom:
+            - configMapRef:
+                name: cv-tuning-config
+            - secretRef:
+                name: cv-tuning-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3379
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3379
+            initialDelaySeconds: 20
+            periodSeconds: 20
