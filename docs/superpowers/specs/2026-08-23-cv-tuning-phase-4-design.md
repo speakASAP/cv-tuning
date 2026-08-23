@@ -80,9 +80,13 @@ at boot. There is no standalone data-source (see `STATE.json.traps`).
    A turn that dies mid-flight leaves `generation_failed`, not `revising` (see failure
    handling below), and `generation_failed` is recoverable through the existing regenerate
    path — so `revising` is never a terminal trap.
-2. **Limit guard.** Per-application cap (20) and the per-user chat-turn rate limit (parent
-   §8.3). Each raises its own distinct error so the UI can tell them apart — one is permanent
-   for this application, the other clears with time.
+2. **Limit guard.** Per-application cap (20 AI revisions) and the per-user chat-turn rate
+   limit (10 per rolling hour, parent §8.3). Each raises its own distinct error so the UI can
+   tell them apart — one is permanent for this application, the other clears with time.
+
+   The rate limit counts the user's turns from `cv_chat`, joined through the applications
+   they own, rather than from an in-memory counter: the pod restarts, and a limiter that
+   resets on deploy is not a limit.
 3. Persist the user's `cv_chat` row.
 4. State → `revising`. Assemble the prompt: previous render markdown, facts snapshot, JD
    requirements, prior chat history, the new instruction.
