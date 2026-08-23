@@ -51,4 +51,33 @@ describe('ReviseService', () => {
     );
     await expect(service.revise(input)).rejects.toThrow(/degraded/i);
   });
+
+  it('never emits more bullets than there are master facts', async () => {
+    const service = new ReviseService(
+      aiReturning(
+        JSON.stringify({
+          bullets: [
+            { text: 'a', sourceFactId: 'f1' },
+            { text: 'b', sourceFactId: 'f1' },
+          ],
+        }),
+      ),
+    );
+    const result = await service.revise(input);
+
+    // One bullet per fact. Two bullets from one fact means the fact was split into claims
+    // it does not individually support.
+    expect(result.bullets).toHaveLength(1);
+    expect(result.droppedBullets[0].reason).toContain('already used');
+  });
+
+  it('drops a bullet with missing text or sourceFactId, with a reason', async () => {
+    const service = new ReviseService(
+      aiReturning(JSON.stringify({ bullets: [{ text: '', sourceFactId: 'f1' }] })),
+    );
+    const result = await service.revise(input);
+
+    expect(result.bullets).toHaveLength(0);
+    expect(result.droppedBullets[0].reason).toContain('missing text or sourceFactId');
+  });
 });

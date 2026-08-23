@@ -47,12 +47,13 @@ export class ReviseService {
 
     const parsed = this.parse(completion.text);
     const known = new Set(input.facts.map((f) => f.factId));
+    const usedFactIds = new Set<string>();
     const bullets: DraftBullet[] = [];
     const droppedBullets: { text: string; reason: string }[] = [];
 
     for (const raw of parsed) {
       const text = typeof raw.text === 'string' ? raw.text.trim() : '';
-      const sourceFactId = typeof raw.sourceFactId === 'string' ? raw.sourceFactId : '';
+      const sourceFactId = typeof raw.sourceFactId === 'string' ? raw.sourceFactId.trim() : '';
 
       if (!text || !sourceFactId) {
         droppedBullets.push({ text, reason: 'bullet is missing text or sourceFactId' });
@@ -66,6 +67,14 @@ export class ReviseService {
         continue;
       }
 
+      if (usedFactIds.has(sourceFactId)) {
+        // Splitting one fact across two bullets manufactures two claims from evidence that
+        // supports one, which is fabrication by division.
+        droppedBullets.push({ text, reason: `source fact "${sourceFactId}" was already used` });
+        continue;
+      }
+
+      usedFactIds.add(sourceFactId);
       bullets.push({
         text,
         sourceFactId,
