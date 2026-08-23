@@ -44,7 +44,10 @@ function makeService(overrides: {
     }),
   };
   const master = {
-    getVersion: jest.fn().mockResolvedValue({ facts: [{ id: 'f1', payload: {}, kind: 'role' }] }),
+    getVersion: jest.fn().mockResolvedValue({
+      master: { id: 'mv-1', markdown: '# Jane Doe\n\n- Senior Developer at Acme' },
+      facts: [{ id: 'f1', payload: {}, kind: 'role' }],
+    }),
   };
   const revise = {
     revise:

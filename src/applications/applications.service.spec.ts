@@ -4,11 +4,11 @@ import { ApplicationsService } from './applications.service';
 const SMART_MODEL = 'openrouter/google/gemma-4-31b-it:free';
 
 const masterV1 = {
-  master: { id: 'm1', markdown: '- Senior Developer at Acme', version: 1 },
+  master: { id: 'm1', markdown: '# Jane Doe\n\n- Senior Developer at Acme', version: 1 },
   facts: [{ factId: 'f1', text: 'Senior Developer at Acme', kind: 'role' }],
 };
 const masterV2 = {
-  master: { id: 'm2', markdown: '- Principal Engineer at Acme', version: 2 },
+  master: { id: 'm2', markdown: '# Jane Doe\n\n- Principal Engineer at Acme', version: 2 },
   facts: [{ factId: 'f9', text: 'Principal Engineer at Acme', kind: 'role' }],
 };
 

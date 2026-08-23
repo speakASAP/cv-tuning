@@ -10,6 +10,7 @@ import { MinioService } from '../storage/minio.service';
 import { scoreAiTell } from './ai-tell';
 import {
   ApplicationState,
+  ArtifactKind,
   ChatRole,
   ConfirmedClaim,
   FactSnapshot,
@@ -23,6 +24,7 @@ import { CvArtifactEntity } from './entities/cv-artifact.entity';
 import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
 import { EntailService } from './entail.service';
+import { buildRenderMarkdown } from './render-markdown';
 import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
 
@@ -154,7 +156,10 @@ export class ApplicationsService {
 
       const validated = await this.entail.validate(drafted.bullets, snapshot);
 
-      const markdown = validated.bullets.map((b) => `- ${b.text}`).join('\n');
+      // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export (Task 8)
+      // can parse it — see render-markdown.ts for why this is a name + one honest section
+      // rather than a full multi-section reconstruction.
+      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets);
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -343,7 +348,8 @@ export class ApplicationsService {
 
       const validated = await this.entail.validate(drafted.bullets, snapshot);
 
-      const markdown = validated.bullets.map((b) => `- ${b.text}`).join('\n');
+      // Same structured convention as generate() — see render-markdown.ts.
+      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets);
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -447,7 +453,9 @@ export class ApplicationsService {
       { bulletText, decision, decidedBy: userId, decidedAt: new Date().toISOString() },
     ];
 
-    const markdown = bullets.map((b) => `- ${b.text}`).join('\n');
+    // `source.markdown` already carries the H1 name — it was built by buildRenderMarkdown
+    // in generate()/revise() — so it is reused directly rather than re-fetching the master.
+    const markdown = buildRenderMarkdown(source.markdown, bullets);
     const revision = revisionNo + 1;
 
     const draft: CvRenderEntity = {
@@ -518,7 +526,89 @@ export class ApplicationsService {
     });
 
     this.logger.log(`application ${applicationId} approved at revision ${latest.revisionNo}`);
+
+    try {
+      await this.exportArtifacts(application.userId, applicationId, latest);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      // The CV IS approved; only the files are missing. Recording the error keeps those two
+      // outcomes distinguishable instead of implying the approval failed.
+      await this.applications.update(applicationId, { stateError: `export failed: ${message}` });
+      this.logger.error(`export failed for approved application ${applicationId}: ${message}`);
+      throw cause;
+    }
+
     return this.findOwned(userId, applicationId);
+  }
+
+  /**
+   * Generates both formats once per render. `(renderId, kind)` is unique in `cv_artifact`
+   * (Task 1), so checking `have` before rendering makes this idempotent even without that
+   * constraint — a re-approve attempt after a partial failure (e.g. PDF succeeded, DOCX
+   * failed) resumes rather than re-spending a render on the format that already exists.
+   */
+  private async exportArtifacts(
+    userId: string,
+    applicationId: string,
+    render: CvRenderEntity,
+  ): Promise<void> {
+    const existing = await this.artifacts.find({ where: { renderId: render.id } });
+    const have = new Set(existing.map((a) => a.kind));
+    const base = `cv-r${render.revisionNo}`;
+
+    for (const kind of ['pdf', 'docx'] as const) {
+      if (have.has(kind)) {
+        this.logger.log(`artifact ${kind} already exists for render ${render.id}; not regenerating`);
+        continue;
+      }
+
+      const file =
+        kind === 'pdf'
+          ? await this.pdf.render(render.markdown, base)
+          : await this.docx.render(render.markdown, base);
+
+      const key = `cv/${userId}/${applicationId}/r${render.revisionNo}.${kind}`;
+      await this.storage.putObject(key, file.content, file.mimeType);
+
+      await this.artifacts.save({
+        renderId: render.id,
+        kind,
+        minioKey: key,
+        sha256: file.sha256,
+        byteSize: file.content.length,
+      } as CvArtifactEntity);
+
+      this.logger.log(`stored ${kind} artifact for render ${render.id} (${file.content.length} bytes)`);
+    }
+  }
+
+  /**
+   * Spec §6.3. Never regenerates: a download that quietly produces a different file than the
+   * one approved breaks the approval guarantee, so a missing artifact is a 404, not a retry.
+   */
+  async download(
+    userId: string,
+    applicationId: string,
+    revisionNo: number,
+    kind: ArtifactKind,
+  ): Promise<{ content: Buffer; artifact: CvArtifactEntity }> {
+    await this.findOwned(userId, applicationId);
+
+    const render = await this.renders.findOne({ where: { applicationId, revisionNo } });
+    if (!render) {
+      throw new NotFoundException(`application ${applicationId} has no revision ${revisionNo}`);
+    }
+
+    const artifact = await this.artifacts.findOne({ where: { renderId: render.id, kind } });
+    if (!artifact) {
+      throw new NotFoundException(
+        `${kind} artifact not found for revision ${revisionNo}; approve the application to generate it`,
+      );
+    }
+
+    const content = await this.storage.getObject(artifact.minioKey);
+    await this.applications.update(applicationId, { state: 'downloaded' as ApplicationState });
+    return { content, artifact };
   }
 
   /**

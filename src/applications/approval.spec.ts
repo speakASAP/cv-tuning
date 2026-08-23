@@ -28,7 +28,7 @@ function makeService(render: Record<string, unknown>, state = 'in_review') {
 }
 
 const renderWith = (bullets: unknown[], confirmed: unknown[] = []) => ({
-  id: 'r1', applicationId: 'app-1', revisionNo: 1, markdown: '- x',
+  id: 'r1', applicationId: 'app-1', revisionNo: 1, markdown: '# Jane Doe\n\n## Tailored Highlights\n\n- x',
   provenance: { bullets, droppedBullets: [] },
   confirmedOverreach: confirmed,
   factsSnapshot: [],
@@ -40,6 +40,19 @@ describe('approval gate', () => {
       renderWith([bullet('Led a team of 12', 'overreach'), bullet('Ran Postgres', 'supported')]),
     );
     await expect(service.approve('u1', 'app-1')).rejects.toThrow(/Led a team of 12/);
+  });
+
+  it('blocks approval with 2+ simultaneous unresolved overreach bullets, naming BOTH', async () => {
+    const { service } = makeService(
+      renderWith([
+        bullet('Led a team of 12', 'overreach'),
+        bullet('Grew revenue 40%', 'overreach'),
+        bullet('Ran Postgres', 'supported'),
+      ]),
+    );
+    const rejection = expect(service.approve('u1', 'app-1')).rejects;
+    await rejection.toThrow(/Led a team of 12/);
+    await rejection.toThrow(/Grew revenue 40%/);
   });
 
   it('refuses to re-approve an application that is not in_review, naming the current state', async () => {

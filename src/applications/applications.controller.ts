@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,8 +8,10 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
 import { ApplicationsService } from './applications.service';
 import { ConfirmClaimDto } from './dto/confirm-claim.dto';
@@ -86,5 +89,26 @@ export class ApplicationsController {
   @Post(':id/approve')
   async approve(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.approve(req.user.id, id);
+  }
+
+  @Get(':id/renders/:revisionNo/download/:kind')
+  async download(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('revisionNo', ParseIntPipe) revisionNo: number,
+    @Param('kind') kind: string,
+    @Res() res: Response,
+  ) {
+    if (kind !== 'pdf' && kind !== 'docx') {
+      throw new BadRequestException(`unknown artifact kind "${kind}"`);
+    }
+    const { content, artifact } = await this.applications.download(req.user.id, id, revisionNo, kind);
+    res.setHeader(
+      'content-type',
+      kind === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader('content-disposition', `attachment; filename="cv-r${revisionNo}.${kind}"`);
+    res.setHeader('content-length', String(artifact.byteSize));
+    res.send(content);
   }
 }
