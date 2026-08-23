@@ -361,7 +361,10 @@ export class ApplicationsService {
         markdown,
         factsSnapshot: snapshot,
         provenance,
-        confirmedOverreach: [],
+        // Carried forward, not reset (matches confirmClaim's own behaviour): a confirmation
+        // remains true of the content even after an AI revision, so resetting it here would
+        // silently lose a user's earlier audit record the moment they ran one more turn.
+        confirmedOverreach: latest.confirmedOverreach,
         aiTellScore: scoreAiTell(markdown).score,
         createdBy: 'ai',
         modelUsed: drafted.modelUsed,
@@ -424,11 +427,41 @@ export class ApplicationsService {
     bulletText: string,
     decision: 'confirm' | 'drop',
   ): Promise<RenderView> {
-    await this.findOwned(userId, applicationId);
+    const application = await this.findOwned(userId, applicationId);
+
+    // Matches revise()/approve()'s state guard. Without it confirmClaim would happily append
+    // a render to an `approved` or `downloaded` application, producing a render newer than
+    // the artifact the user already reviewed and downloaded — the same spec §6.3 divergence
+    // Task 5's approve() guard exists to prevent, entered through this door instead.
+    if (application.state !== 'in_review') {
+      throw new ConflictException(
+        `application ${applicationId} is in state ${application.state}; claims can only be ` +
+          'confirmed or dropped while the application is in_review',
+      );
+    }
 
     const source = await this.renders.findOne({ where: { applicationId, revisionNo } });
     if (!source) {
       throw new NotFoundException(`application ${applicationId} has no revision ${revisionNo}`);
+    }
+
+    const renders = await this.renders.find({ where: { applicationId }, order: { revisionNo: 'DESC' } });
+    const latest = renders[0];
+    if (latest && latest.revisionNo !== revisionNo) {
+      // The new revision number must come from the latest render, never from the caller-
+      // supplied path param: deriving `revisionNo + 1` blindly is exactly what let two
+      // sequential confirmations against the same stale UI state (confirm A, then confirm B
+      // — both submitted against the revision the UI originally showed) collide on
+      // `uq_render_revision`/`idx_render_idempotency` as an opaque Postgres error. Rejecting
+      // here with the real latest revision number turns that into a clear, actionable domain
+      // error instead: the caller re-fetches the render it just created and resubmits the
+      // remaining decision against it, exactly as the UI is expected to do after any
+      // render-producing call.
+      throw new ConflictException(
+        `revision ${revisionNo} of application ${applicationId} is no longer the latest ` +
+          `revision (latest is ${latest.revisionNo}); fetch the latest render and retry ` +
+          'the confirm-or-drop decision against it',
+      );
     }
 
     const target = source.provenance.bullets.find((b) => b.text === bulletText);
@@ -505,6 +538,16 @@ export class ApplicationsService {
     const latest = renders[0];
     if (!latest) {
       throw new ConflictException(`application ${applicationId} has no render to approve`);
+    }
+
+    if (latest.provenance.bullets.length === 0) {
+      // Every bullet was either never produced or dropped/dropped-via-decision. A name-only
+      // CV under an empty heading is not a reviewable outcome — approving it would let the
+      // user download a file with no content, with no error anywhere in the chain.
+      throw new ConflictException(
+        `application ${applicationId} revision ${latest.revisionNo} has no bullets; ` +
+          'nothing to approve',
+      );
     }
 
     const decided = new Set(latest.confirmedOverreach.map((c) => c.bulletText));

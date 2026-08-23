@@ -2,15 +2,25 @@ import { ApplicationsService } from './applications.service';
 
 const render = {
   id: 'r1', applicationId: 'app-1', revisionNo: 2, markdown: '# Jane\n\n## Exp\n- did a thing',
-  provenance: { bullets: [], droppedBullets: [] }, confirmedOverreach: [], factsSnapshot: [],
+  provenance: {
+    bullets: [{ text: 'did a thing', sourceFactId: 'f1', targetRequirement: null, verdict: 'supported', span: null }],
+    droppedBullets: [],
+  },
+  confirmedOverreach: [], factsSnapshot: [],
 };
 
-function makeService(opts: { pdfImpl?: jest.Mock; existingArtifacts?: unknown[] } = {}) {
+function makeService(
+  opts: { pdfImpl?: jest.Mock; existingArtifacts?: unknown[]; render?: typeof render } = {},
+) {
+  const activeRender = opts.render ?? render;
   const applications = {
     findOne: jest.fn().mockResolvedValue({ id: 'app-1', userId: 'u1', state: 'in_review' }),
     update: jest.fn().mockResolvedValue(undefined),
   };
-  const renders = { find: jest.fn().mockResolvedValue([render]), findOne: jest.fn().mockResolvedValue(render) };
+  const renders = {
+    find: jest.fn().mockResolvedValue([activeRender]),
+    findOne: jest.fn().mockResolvedValue(activeRender),
+  };
   const artifacts = {
     find: jest.fn().mockResolvedValue(opts.existingArtifacts ?? []),
     findOne: jest.fn().mockResolvedValue(null),
@@ -73,5 +83,18 @@ describe('export on approve', () => {
   it('raises 404 for a missing artifact instead of silently regenerating it', async () => {
     const { service } = makeService();
     await expect(service.download('u1', 'app-1', 2, 'pdf')).rejects.toThrow(/not found/i);
+  });
+
+  it('refuses to approve a render with zero bullets rather than exporting a name-only CV', async () => {
+    const zeroBulletRender = {
+      ...render,
+      markdown: '# Jane\n\n## Tailored Highlights',
+      provenance: { bullets: [], droppedBullets: [] },
+    };
+    const { service, pdf, docx } = makeService({ render: zeroBulletRender });
+
+    await expect(service.approve('u1', 'app-1')).rejects.toThrow(/no bullets/i);
+    expect(pdf.render).not.toHaveBeenCalled();
+    expect(docx.render).not.toHaveBeenCalled();
   });
 });

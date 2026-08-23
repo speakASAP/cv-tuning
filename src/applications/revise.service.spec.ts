@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ReviseService } from './revise.service';
 import { RevisePromptInput } from './revise.prompt';
 
@@ -79,5 +80,39 @@ describe('ReviseService', () => {
 
     expect(result.bullets).toHaveLength(0);
     expect(result.droppedBullets[0].reason).toContain('missing text or sourceFactId');
+  });
+
+  it('logs each dropped bullet individually at error level, matching TailorService (Minor 2)', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const service = new ReviseService(
+        aiReturning(
+          JSON.stringify({
+            bullets: [
+              { text: 'cites a ghost fact', sourceFactId: 'ghost' },
+              { text: 'a', sourceFactId: 'f1' },
+              { text: 'b', sourceFactId: 'f1' },
+            ],
+          }),
+        ),
+      );
+
+      const result = await service.revise(input);
+      expect(result.droppedBullets).toHaveLength(2);
+
+      // One logger.error call per dropped bullet, naming its own reason and text — an
+      // aggregate warn would lose the distinction between "cited unknown source fact" and
+      // "fabrication by division" (the dedup guard).
+      const errorMessages = errorSpy.mock.calls.map((c) => String(c[0]));
+      expect(errorMessages).toHaveLength(2);
+      expect(errorMessages.some((m) => m.includes('ghost') && m.includes('cites a ghost fact'))).toBe(true);
+      expect(errorMessages.some((m) => m.includes('already used') && m.includes('text="b"'))).toBe(true);
+      // No aggregate warn call for the drops.
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });

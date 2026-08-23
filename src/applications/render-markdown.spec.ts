@@ -52,4 +52,28 @@ describe('buildRenderMarkdown', () => {
     expect(renderToDocument(markdown).contact.name).toBe('Jane Doe');
     expect(renderToDocument(markdown).sections[0].heading).toBe('Tailored Highlights');
   });
+
+  it('collapses a multi-line bullet so a two-line model output cannot break export after it is stored (Important 1)', () => {
+    const markdown = buildRenderMarkdown('# Jane Doe', [{ text: 'led team\nand did stuff' }]);
+
+    expect(markdown).toBe('# Jane Doe\n\n## Tailored Highlights\n\n- led team and did stuff');
+    expect(() => renderToDocument(markdown)).not.toThrow();
+    expect(renderToDocument(markdown).sections[0].entries[0].bullets).toEqual(['led team and did stuff']);
+  });
+
+  it('collapses interior runs of whitespace/tabs in a bullet, not just newlines', () => {
+    const markdown = buildRenderMarkdown('# Jane Doe', [{ text: 'led  team\t\tof twelve' }]);
+    expect(markdown).toContain('- led team of twelve');
+  });
+
+  it('neutralizes a leading "#" in bullet text so it cannot be counted as a second H1 (Important 2)', () => {
+    const markdown = buildRenderMarkdown('# Jane Doe', [{ text: '# 1 revenue driver on the team' }]);
+
+    expect(markdown).toBe('# Jane Doe\n\n## Tailored Highlights\n\n- 1 revenue driver on the team');
+    // The exact failure confirmClaim would otherwise re-trigger: re-parsing this render's own
+    // markdown must not raise MissingMasterNameError.
+    expect(() => extractH1Name(markdown)).not.toThrow();
+    expect(extractH1Name(markdown)).toBe('Jane Doe');
+    expect(() => renderToDocument(markdown)).not.toThrow();
+  });
 });

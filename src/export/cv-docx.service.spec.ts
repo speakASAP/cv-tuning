@@ -22,6 +22,14 @@ describe('CvDocxService', () => {
     expect(filename).toBe('jane-acme.docx');
   });
 
+  it('returns a stable sha256 and byte-identical content seconds apart (artifact idempotency, spec §6.3)', async () => {
+    const a = await new CvDocxService().render(CV, 'x');
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const b = await new CvDocxService().render(CV, 'x');
+    expect(a.sha256).toBe(b.sha256);
+    expect(a.content.equals(b.content)).toBe(true);
+  });
+
   it('propagates a parse failure rather than emitting a blank document', async () => {
     await expect(new CvDocxService().render('   ', 'x')).rejects.toThrow(/empty/i);
   });

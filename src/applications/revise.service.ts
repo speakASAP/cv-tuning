@@ -82,8 +82,11 @@ export class ReviseService {
       });
     }
 
-    if (droppedBullets.length > 0) {
-      this.logger.warn(`revision dropped ${droppedBullets.length} bullet(s) failing the source constraint`);
+    for (const dropped of droppedBullets) {
+      // A dropped bullet is a grounding event (spec §6): "cited unknown source fact" and
+      // "fabrication by division" (the dedup guard) must stay distinguishable in logs, exactly
+      // as TailorService logs them for the first generation — an aggregate count loses both.
+      this.logger.error(`dropped revised bullet: ${dropped.reason}; text="${dropped.text}"`);
     }
 
     return {

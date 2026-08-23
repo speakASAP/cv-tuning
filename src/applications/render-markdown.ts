@@ -62,6 +62,24 @@ export function extractH1Name(markdown: string): string {
  */
 export function buildRenderMarkdown(sourceMarkdown: string, bullets: Pick<TailoredBullet, 'text'>[]): string {
   const name = extractH1Name(sourceMarkdown);
-  const bulletLines = bullets.map((b) => `- ${b.text}`).join('\n');
+  const bulletLines = bullets.map((b) => `- ${normalizeBulletText(b.text)}`).join('\n');
   return `# ${name}\n\n## Tailored Highlights${bulletLines ? `\n\n${bulletLines}` : ''}`;
+}
+
+/**
+ * Neither `TailorService` nor `ReviseService` normalizes model output beyond truthiness, so a
+ * bullet can arrive multi-line (breaking `cv-document.ts`'s one-bullet-per-line parse at
+ * EXPORT time, after the render has already been saved, reviewed, and possibly approved — no
+ * retry path exists) or starting with `# ` (which `extractH1Name` then counts as a second H1,
+ * raising `MissingMasterNameError` for a problem that has nothing to do with the master CV).
+ * Collapsing here — rather than at generation time — also covers renders already written to
+ * the database, since `confirmClaim` re-parses a prior render's own markdown through this
+ * same builder.
+ */
+function normalizeBulletText(text: string): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  // A leading '#' (any run of them) would be read as a heading marker by the H1/H2/H3
+  // convention this markdown is built for — neutralize it without disturbing the rest of
+  // the sentence, e.g. "# 1 revenue driver" -> "1 revenue driver".
+  return collapsed.replace(/^#+\s*/, '');
 }
