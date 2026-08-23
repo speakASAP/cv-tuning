@@ -156,6 +156,31 @@ export class MasterCvService {
   }
 
   /**
+   * Loads a specific master version by id, scoped to its owner.
+   *
+   * An application pins the master version it was generated from (spec §4.2) and must keep
+   * reading that pinned version, never whichever one is current now. Returning the current
+   * master here instead would silently change what the user already reviewed.
+   */
+  async getVersion(userId: string, masterId: string): Promise<CurrentMaster | null> {
+    const master = await this.dataSource
+      .getRepository(CvMasterEntity)
+      .findOne({ where: { id: masterId, userId } });
+
+    if (!master) {
+      return null;
+    }
+
+    this.assertFactsFresh(master);
+
+    const facts = await this.dataSource
+      .getRepository(CvFactEntity)
+      .find({ where: { masterId: master.id }, order: { position: 'ASC' } });
+
+    return { master, facts };
+  }
+
+  /**
    * If the stored markdown no longer hashes to the value its facts were extracted from,
    * every downstream stage would silently tailor against an outdated fact graph. That is
    * the frozen-table failure class, so it raises instead.

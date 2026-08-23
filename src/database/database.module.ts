@@ -1,12 +1,21 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CvApplicationEntity } from '../applications/entities/cv-application.entity';
+import { CvRenderEntity } from '../applications/entities/cv-render.entity';
 import { CvJobEntity } from '../jobs/entities/cv-job.entity';
 import { CvFactEntity } from '../master/entities/cv-fact.entity';
 import { CvMasterEntity } from '../master/entities/cv-master.entity';
 import { CvProfileEntity } from '../master/entities/cv-profile.entity';
 
-export const CV_ENTITIES = [CvProfileEntity, CvMasterEntity, CvFactEntity, CvJobEntity];
+export const CV_ENTITIES = [
+  CvProfileEntity,
+  CvMasterEntity,
+  CvFactEntity,
+  CvJobEntity,
+  CvApplicationEntity,
+  CvRenderEntity,
+];
 
 @Module({
   imports: [
