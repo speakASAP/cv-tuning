@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cv-tuning-config
+  namespace: statex-apps
+  labels:
+    app: cv-tuning
+data:
+  NODE_ENV: "production"
+  PORT: "3379"
+  AUTH_SERVICE_URL: "http://auth-microservice:3370"
+  AI_SERVICE_URL: "http://ai-microservice:3380"
+  LOGGING_SERVICE_URL: "http://logging-microservice:3367"
+  MINIO_ENDPOINT: "http://minio-microservice:9000"
