@@ -1,8 +1,8 @@
-# cv-microservice Phase 1 — Foundation Implementation Plan
+# cv-tuning Phase 1 — Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up `cv-microservice` with authentication, and let a user import a master CV and edit it as Markdown, with a fact graph derived from that Markdown and drift made detectable.
+**Goal:** Stand up `cv-tuning` with authentication, and let a user import a master CV and edit it as Markdown, with a fact graph derived from that Markdown and drift made detectable.
 
 **Architecture:** NestJS service on port 3379 behind central auth. Markdown is the user-facing source of truth; the fact graph is a derived, versioned projection re-extracted on every save, with fact IDs matched by content hash so unchanged bullets keep their identity. A stored SHA of the Markdown the facts came from makes divergence raise instead of degrade.
 
@@ -53,15 +53,15 @@ Boundaries: `fact-extractor` turns text into facts and knows nothing about stora
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: a service listening on 3379 with `GET /health` returning `{ status: 'ok', service: 'cv-microservice' }`
+- Produces: a service listening on 3379 with `GET /health` returning `{ status: 'ok', service: 'cv-tuning' }`
 
 - [ ] **Step 1: Scaffold from the ecosystem standard**
 
 Use the registration skill rather than hand-rolling — it assigns config, manifests, Vault paths, and agent docs consistently.
 
 ```bash
-cd /home/ssf/Documents/Github/cv-microservice
-/register-new-app cv-microservice 3379
+cd /home/ssf/Documents/Github/cv-tuning
+/register-new-app cv-tuning 3379
 ```
 
 If the skill cannot run, copy the shape of `catalog-microservice` (`package.json`, `tsconfig.json`, `nest-cli.json`, `Dockerfile`, `k8s/`, `scripts/deploy.sh`), replacing name and port throughout.
@@ -75,7 +75,7 @@ import { HealthController } from './health.controller';
 
 describe('HealthController', () => {
   it('reports the service name and status', () => {
-    expect(new HealthController().check()).toEqual({ status: 'ok', service: 'cv-microservice' });
+    expect(new HealthController().check()).toEqual({ status: 'ok', service: 'cv-tuning' });
   });
 });
 ```
@@ -99,7 +99,7 @@ import { Controller, Get } from '@nestjs/common';
 export class HealthController {
   @Get()
   check(): { status: string; service: string } {
-    return { status: 'ok', service: 'cv-microservice' };
+    return { status: 'ok', service: 'cv-tuning' };
   }
 }
 ```
@@ -120,7 +120,7 @@ Expected: test PASS; curl returns the JSON above.
 
 ```bash
 git add -A
-git commit -m "feat: scaffold cv-microservice on port 3379"
+git commit -m "feat: scaffold cv-tuning on port 3379"
 ```
 
 ---
@@ -908,9 +908,9 @@ psql "postgresql://postgres@localhost:5433/postgres" -c "GRANT ALL PRIVILEGES ON
 - [ ] **Step 2: Store secrets in Vault and name every key in the manifest**
 
 ```bash
-/vault-secret cv-microservice set CV_DATABASE_URL=postgresql://cv_app:<generated>@db-server-postgres:5432/cv
-/vault-secret cv-microservice set MINIO_ACCESS_KEY=<value>
-/vault-secret cv-microservice set MINIO_SECRET_KEY=<value>
+/vault-secret cv-tuning set CV_DATABASE_URL=postgresql://cv_app:<generated>@db-server-postgres:5432/cv
+/vault-secret cv-tuning set MINIO_ACCESS_KEY=<value>
+/vault-secret cv-tuning set MINIO_SECRET_KEY=<value>
 ```
 
 Add all three to `k8s/external-secret.yaml` under `spec.data`. A key absent here never reaches the pod while ESO still reports `Synced`.
@@ -929,7 +929,7 @@ Expected: migrations apply cleanly; `cv_profile`, `cv_master`, `cv_fact` exist. 
 
 ```bash
 git add k8s/
-git commit -m "feat: deployment wiring for cv-microservice phase 1"
+git commit -m "feat: deployment wiring for cv-tuning phase 1"
 git push
 ```
 
@@ -937,8 +937,8 @@ git push
 
 ```bash
 ../shared/scripts/deploy-queue/queuectl.sh status
-../shared/scripts/wait-for-rollout.sh -n statex-apps cv-microservice
-kubectl get pods -n statex-apps -l app=cv-microservice -o wide
+../shared/scripts/wait-for-rollout.sh -n statex-apps cv-tuning
+kubectl get pods -n statex-apps -l app=cv-tuning -o wide
 ```
 
 Compare pod age to the commit time. Then reproduce the real scenario end to end:

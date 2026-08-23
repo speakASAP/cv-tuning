@@ -1,4 +1,4 @@
-# cv-microservice
+# cv-tuning
 
 CV tailoring platform. A job seeker stores one master CV, submits job-posting URLs, and gets
 a CV tailored to each position — reviewed as a git-style diff, revised through voice-driven

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-22
 **Status:** Approved for planning
-**Service:** `cv-microservice`, port **3379**, domain `cv.alfares.cz`
+**Service:** `cv-tuning`, port **3379**, domain `cv.alfares.cz`
 **Depends on:** BPCP Workflow Executor (built first) —
 `business-process-control-plane/docs/specs/2026-08-22-bpcp-workflow-executor-design.md`
 
@@ -98,7 +98,7 @@ tradeoff is deliberate and accepted:
 Browser (Next.js, cv.alfares.cz)
   │  Web Speech API — voice never leaves the browser
   ▼
-cv-microservice (NestJS, port 3379)
+cv-tuning (NestJS, port 3379)
   ├─ auth-microservice 3370 ── JWT validation
   ├─ ai-microservice  3380 ── ALL LLM calls (no direct provider calls, ever)
   ├─ bpcp             3375 ── workflow instances, signals, audit
@@ -479,13 +479,16 @@ stays at ≈€0.
 3. **Premium unblock mechanics** (Phase 9, only if Phase 8 justifies it) — `premium`
    requires per-call human approval; a metered path needs that policy lifted in
    `ai-microservice`.
-4. **Remote repo** — `cv-microservice` was `git init`'d locally on 2026-08-22; owner will
-   create the remote.
+Closed 2026-08-23:
+
+- ~~Remote repo~~ — `git@github.com:speakASAP/cv-tuning.git`. The service was renamed from
+  `cv-microservice` to `cv-tuning` on 2026-08-23; the name is used uniformly for the repo,
+  the K8s deployment, and the Vault path `secret/prod/cv-tuning`.
 
 Closed 2026-08-22:
 
 - ~~`ECOSYSTEM_MAP.md` ports~~ — 3378 (logging frontend) and 3379 (cv) added, plus a
-  cv-microservice service row.
+  cv-tuning service row.
 - ~~`ai-microservice` doc drift~~ — `AGENTS.md` corrected against `litellm_config.yaml`:
   `cheap`/`smart` slugs, both fallback targets (Nemotron, not Ollama), plus new notes on
   silent degradation and timeout nesting.
