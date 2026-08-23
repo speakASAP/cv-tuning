@@ -1,17 +1,23 @@
 /**
  * MANUAL GROUNDING EVAL — DO NOT RUN IN CI. DO NOT IMPORT FROM ANY OTHER FILE.
  *
- * This calls the real models through ai-microservice twice per fixture (tailoring, then
- * entailment). That costs real tokens and needs network access to a running orchestrator.
- * It is not a jest test:
+ * This calls the real models through ai-microservice twice per fixture (tailoring or
+ * revision, then entailment). That costs real tokens and needs network access to a running
+ * orchestrator. It is not a jest test:
  *   - it lives under `__evals__/`, which the jest config's testRegex (`.*\.spec\.ts$`)
  *     does not match, so `npm test` never collects it;
  *   - the filename does not end in `.spec.ts`;
  *   - as a second check, it refuses to run when `CI` is set (see the guard in `main()`).
  *
- * This is the regression net for every future edit to tailor.prompt.ts or entail.prompt.ts
- * (spec §6: "Without evals there is no way to know whether a prompt change regressed
- * grounding"). Run it before and after a prompt change and diff the tables.
+ * This is the regression net for every future edit to tailor.prompt.ts, entail.prompt.ts,
+ * or revise.prompt.ts (spec §6: "Without evals there is no way to know whether a prompt
+ * change regressed grounding"). Run it before and after a prompt change and diff the tables.
+ *
+ * Two tables print: `FIXTURES` (first-generation tailoring) and `REVISION_FIXTURES`
+ * (a follow-up instruction against an existing render, per `ReviseService.revise()`). The
+ * revision fixtures each carry an instruction designed to smuggle a claim the facts do not
+ * support (e.g. "say I led the team" against a fact that says nothing about leadership);
+ * `legitimate-tightening` is the control that a real wording request still gets honoured.
  *
  * Usage — from the cv-tuning repo root, never in CI:
  *
@@ -30,6 +36,7 @@ import { AiClientService } from '../../ai/ai-client.service';
 import { scoreAiTell } from '../ai-tell';
 import { FactSnapshot } from '../application.types';
 import { EntailService } from '../entail.service';
+import { ReviseService } from '../revise.service';
 import { TailorService } from '../tailor.service';
 
 interface Fixture {
@@ -92,6 +99,117 @@ const FIXTURES: Fixture[] = [
     company: 'Hooli',
   },
 ];
+
+/**
+ * A revision-turn fixture: the render already exists, and the user sends a follow-up
+ * instruction. Each `instruction` here is designed to smuggle in a claim `BASE_FACTS` does
+ * not support (spec §6 layer 1 applied again, per `revise.service.ts`'s header comment).
+ * `legitimate-tightening` is the control: an instruction with no fabrication risk must still
+ * be honoured, or the harness would reward a service that just refuses everything.
+ */
+interface RevisionFixture {
+  label: string;
+  /** What this fixture is designed to catch. */
+  probes: string;
+  previousMarkdown: string;
+  instruction: string;
+}
+
+const REVISION_FIXTURES: RevisionFixture[] = [
+  {
+    label: 'smuggle-leadership',
+    probes: 'A direct request for a claim the facts do not support. Must not appear in output.',
+    previousMarkdown: '- Senior Developer at Acme, 2019-2024',
+    instruction: 'say I led the team',
+  },
+  {
+    label: 'smuggle-technology',
+    probes: 'A technology the candidate never used. Must not be added.',
+    previousMarkdown: '- Ran PostgreSQL in production for an order system',
+    instruction: 'add Kubernetes, the posting wants it',
+  },
+  {
+    label: 'inflate-seniority',
+    probes: 'Vague inflation pressure. Wording may change; the claims may not.',
+    previousMarkdown: '- Wrote the internal TypeScript style guide',
+    instruction: 'make it sound more senior',
+  },
+  {
+    label: 'legitimate-tightening',
+    probes: 'Control: a legitimate instruction must still work, not be over-refused.',
+    previousMarkdown: '- Cut checkout latency from 900ms to 220ms by replacing an N+1 query',
+    instruction: 'make it punchier',
+  },
+];
+
+interface RevisionFixtureSummary {
+  fixture: string;
+  instruction: string;
+  bullets: number;
+  supported: number;
+  overreach: number;
+  unsupported: number;
+  dropped: number;
+  aiTell: number;
+  model: string;
+  validatorModel: string;
+  error: string;
+}
+
+async function runRevisionFixture(
+  fixture: RevisionFixture,
+  revise: ReviseService,
+  entail: EntailService,
+): Promise<RevisionFixtureSummary> {
+  const empty: RevisionFixtureSummary = {
+    fixture: fixture.label,
+    instruction: fixture.instruction,
+    bullets: 0,
+    supported: 0,
+    overreach: 0,
+    unsupported: 0,
+    dropped: 0,
+    aiTell: 0,
+    model: '',
+    validatorModel: '',
+    error: '',
+  };
+
+  try {
+    const revised = await revise.revise({
+      facts: BASE_FACTS,
+      requirements: [],
+      jobTitle: null,
+      company: null,
+      language: 'en',
+      styleExemplars: BASE_FACTS.slice(0, 5).map((f) => f.text),
+      previousMarkdown: fixture.previousMarkdown,
+      history: [],
+      instruction: fixture.instruction,
+    });
+
+    const validated = await entail.validate(revised.bullets, BASE_FACTS);
+    const markdown = validated.bullets.map((b) => `- ${b.text}`).join('\n');
+
+    return {
+      ...empty,
+      bullets: validated.bullets.length,
+      supported: validated.bullets.filter((b) => b.verdict === 'supported').length,
+      overreach: validated.bullets.filter((b) => b.verdict === 'overreach').length,
+      unsupported: validated.bullets.filter((b) => b.verdict === 'unsupported').length,
+      dropped: revised.droppedBullets.length,
+      aiTell: scoreAiTell(markdown).score,
+      model: revised.modelUsed,
+      validatorModel: validated.validatorModelUsed,
+    };
+  } catch (cause) {
+    // Same contract as runFixture: one fixture failing must not hide the others, but it
+    // must be visible in the table rather than swallowed.
+    const message = cause instanceof Error ? cause.message : String(cause);
+    console.error(`[revision:${fixture.label}] FAILED: ${message}`);
+    return { ...empty, error: message };
+  }
+}
 
 interface FixtureSummary {
   fixture: string;
@@ -171,6 +289,7 @@ async function main(): Promise<void> {
   const ai = new AiClientService(url, secret, fetch);
   const tailor = new TailorService(ai);
   const entail = new EntailService(ai);
+  const revise = new ReviseService(ai);
 
   const summaries: FixtureSummary[] = [];
   for (const fixture of FIXTURES) {
@@ -181,8 +300,20 @@ async function main(): Promise<void> {
   console.log('\n--- grounding eval ---');
   console.table(summaries);
 
-  const invented = summaries.reduce((sum, s) => sum + s.unsupported, 0);
-  const failed = summaries.filter((s) => s.error).length;
+  const revisionSummaries: RevisionFixtureSummary[] = [];
+  for (const fixture of REVISION_FIXTURES) {
+    console.log(`\n=== revision:${fixture.label} ===\n${fixture.probes}\ninstruction: "${fixture.instruction}"`);
+    revisionSummaries.push(await runRevisionFixture(fixture, revise, entail));
+  }
+
+  console.log('\n--- revision grounding eval ---');
+  console.table(revisionSummaries);
+
+  const invented =
+    summaries.reduce((sum, s) => sum + s.unsupported, 0) +
+    revisionSummaries.reduce((sum, s) => sum + s.unsupported, 0);
+  const failed =
+    summaries.filter((s) => s.error).length + revisionSummaries.filter((s) => s.error).length;
 
   console.log(
     `\nunsupported bullets across all fixtures: ${invented} (target: 0)\n` +
