@@ -3,8 +3,18 @@ import { FactKind } from '../master.types';
 
 @Entity('cv_fact')
 export class CvFactEntity {
+  /** Row identity. A fact is re-inserted for every master version that contains it. */
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  /**
+   * Stable identity ACROSS versions. Unchanged bullets keep the same factId when a new
+   * master version is saved, so provenance recorded against a factId survives edits
+   * elsewhere in the CV. This is what tailored bullets cite, never `id`.
+   */
+  @Index('idx_fact_fact_id')
+  @Column({ type: 'uuid' })
+  factId!: string;
 
   @Index('idx_fact_master')
   @Column({ type: 'uuid' })

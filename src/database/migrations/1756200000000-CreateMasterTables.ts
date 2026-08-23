@@ -39,6 +39,7 @@ export class CreateMasterTables1756200000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE "cv_fact" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "factId" uuid NOT NULL,
         "masterId" uuid NOT NULL REFERENCES "cv_master"("id") ON DELETE CASCADE,
         "kind" text NOT NULL,
         "text" text NOT NULL,
@@ -49,6 +50,11 @@ export class CreateMasterTables1756200000000 implements MigrationInterface {
       )
     `);
     await queryRunner.query(`CREATE INDEX "idx_fact_master" ON "cv_fact" ("masterId")`);
+    await queryRunner.query(`CREATE INDEX "idx_fact_fact_id" ON "cv_fact" ("factId")`);
+    // One row per (version, fact): a fact cannot appear twice in the same master version.
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "uq_fact_master_factid" ON "cv_fact" ("masterId", "factId")`,
+    );
     await queryRunner.query(`CREATE INDEX "idx_fact_content_hash" ON "cv_fact" ("contentHash")`);
   }
 
