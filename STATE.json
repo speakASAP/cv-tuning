@@ -1,0 +1,36 @@
+{
+  "service": "cv-tuning",
+  "port": 3379,
+  "updated": "2026-08-23",
+  "branch": "main",
+  "lastCommit": "e6a2119",
+  "gate": "No third-party users before Phase 7 (GDPR). Phases 1-6 run on owner's own CV data only.",
+  "models": "Free tiers only (cheap|smart) until Phase 8 benchmark. premium is BLOCKED.",
+  "phases": {
+    "0": { "status": "done", "what": "BPCP workflow executor (instances, wait-for-signal, row locking)", "repo": "business-process-control-plane" },
+    "1": { "status": "done", "what": "Scaffold, auth guard, master CV import, MD/fact graph, drift detector" },
+    "2": { "status": "done", "what": "JD ingest (SSRF-guarded fetcher, paste fallback), requirement parser, fit scorer with citation validation" },
+    "3": { "status": "in-progress", "what": "Tailoring + grounding validator + eval harness + diff UI" },
+    "4": { "status": "todo", "what": "Voice revision loop, approve, PDF/DOCX export" },
+    "5": { "status": "todo", "what": "Dashboard, outcome tracking, notification nudges" },
+    "6": { "status": "todo", "what": "Cover letters, screening answers, proof-of-work surfacing" },
+    "7": { "status": "todo", "what": "GDPR: pseudonymization, consent, delete-cascade, export, retention" },
+    "8": { "status": "todo", "what": "Model benchmark across tiers; gates premium and all pricing" },
+    "9": { "status": "todo", "what": "Premium enablement, only if Phase 8 justifies it" },
+    "10": { "status": "todo", "what": "Billing / pricing / tiers via payments-microservice" }
+  },
+  "tests": { "suites": 15, "cases": 159, "command": "npm test" },
+  "docs": {
+    "spec": "docs/specs/2026-08-22-cv-tailoring-platform-design.md",
+    "plans": "docs/superpowers/plans/"
+  },
+  "openItems": [
+    "JWKS exception request for local token verification (spec 3.2)",
+    "Model benchmark (Phase 8) gates premium and all pricing"
+  ],
+  "traps": [
+    "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",
+    "git merge does not trigger auto-deploy (post-commit hook only, no post-merge). Batch branches need enqueue.sh or ./scripts/deploy.sh.",
+    "AI client timeout must stay above LiteLLM proxy 120s or the fallback chain never runs."
+  ]
+}
