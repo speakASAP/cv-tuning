@@ -50,4 +50,32 @@ describe('renderToDocument', () => {
   it('raises on empty input', () => {
     expect(() => renderToDocument('   ')).toThrow(/empty/i);
   });
+
+  it('raises on a stray prose line inside a section rather than dropping it', () => {
+    const md = '# Jane\n\n## Exp\n### Dev — Acme (2020)\nstray prose line\n- real bullet';
+    expect(() => renderToDocument(md)).toThrow(/stray prose line/);
+  });
+
+  it('raises on a malformed heading marker (missing space) rather than losing the entry', () => {
+    const md = '# Jane\n\n## Exp\n###Dev — Acme (2020)\n- real bullet';
+    expect(() => renderToDocument(md)).toThrow(/###Dev/);
+  });
+
+  it('raises on a starred bullet rather than dropping it silently', () => {
+    const md = '# Jane\n\n## Exp\n### Dev — Acme (2020)\n* starred';
+    expect(() => renderToDocument(md)).toThrow(/starred/);
+  });
+
+  it('raises on a second H1 rather than silently overwriting the name', () => {
+    const md = '# Jane\n# Second\n\n## Exp\n- x';
+    expect(() => renderToDocument(md)).toThrow(/second.*#|duplicate|already/i);
+  });
+
+  it('splits a hyphenated title and org on the em-dash, not the hyphen', () => {
+    const md = '# Jane\n\n## Exp\n### Full-Stack Developer — Acme-Corp (2020-2024)\n- x';
+    const entry = renderToDocument(md).sections[0].entries[0];
+    expect(entry.title).toBe('Full-Stack Developer');
+    expect(entry.org).toBe('Acme-Corp');
+    expect(entry.period).toBe('2020-2024');
+  });
 });
