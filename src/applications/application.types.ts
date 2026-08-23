@@ -47,3 +47,24 @@ export interface RenderProvenance {
   /** Bullets the source constraint rejected, kept so a drop is diagnosable rather than invisible. */
   droppedBullets: { text: string; reason: string }[];
 }
+
+export const CHAT_ROLES = ['user', 'assistant'] as const;
+export type ChatRole = (typeof CHAT_ROLES)[number];
+
+export const INPUT_MODES = ['text', 'voice'] as const;
+export type InputMode = (typeof INPUT_MODES)[number];
+
+export const ARTIFACT_KINDS = ['pdf', 'docx'] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+/**
+ * A human decision on an `overreach` bullet (spec §6 layer 3). This is the audit trail
+ * proving a person accepted a new claim, so it records who decided and when — never just
+ * that a decision happened.
+ */
+export interface ConfirmedClaim {
+  bulletText: string;
+  decision: 'confirm' | 'drop';
+  decidedBy: string;
+  decidedAt: string;
+}

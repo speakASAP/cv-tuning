@@ -43,6 +43,13 @@ export class CvApplicationEntity {
   @Column({ type: 'text', nullable: true })
   outcome!: Outcome | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  approvedAt!: Date | null;
+
+  /** Counts AI revision turns only, so the cap bounds model spend and nothing else. */
+  @Column({ type: 'int', default: 0 })
+  revisionCount!: number;
+
   @Column({ type: 'text' })
   renderLanguage!: string;
 

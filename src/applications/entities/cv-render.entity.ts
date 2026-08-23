@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
-import { FactSnapshot, RenderProvenance } from '../application.types';
+import { ConfirmedClaim, FactSnapshot, RenderProvenance } from '../application.types';
 
 /**
  * One revision of a tailored CV.
@@ -50,6 +50,10 @@ export class CvRenderEntity {
 
   @Column({ type: 'text' })
   createdBy!: 'ai' | 'user';
+
+  /** Human decisions on `overreach` bullets (spec §6 layer 3). Empty until one is made. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  confirmedOverreach!: ConfirmedClaim[];
 
   /**
    * The model that ACTUALLY served generation, not the tier requested (spec §8.0).
