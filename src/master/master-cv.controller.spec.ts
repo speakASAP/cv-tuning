@@ -6,6 +6,9 @@ const authed = (id = 'u1') => ({ user: { id, email: 'a@b.c' } }) as never;
 describe('MasterCvController', () => {
   let service: any;
   let gdocs: any;
+  let documents: any;
+  let linkedin: any;
+  let storage: any;
   let controller: MasterCvController;
 
   beforeEach(() => {
@@ -17,7 +20,10 @@ describe('MasterCvController', () => {
       getCurrent: jest.fn(async () => null),
     };
     gdocs = { fetchMarkdown: jest.fn(async () => '# CV from docs') };
-    controller = new MasterCvController(service, gdocs);
+    documents = { extract: jest.fn(async () => '# CV from file') };
+    linkedin = { toMarkdown: jest.fn(() => '# CV from linkedin') };
+    storage = { putObject: jest.fn(async (key: string) => key) };
+    controller = new MasterCvController(service, gdocs, documents, linkedin, storage);
   });
 
   it('saves pasted markdown for the authenticated user', async () => {
@@ -78,6 +84,38 @@ describe('MasterCvController', () => {
     await expect(
       controller.importGdocs(authed(), { url: 'https://docs.google.com/document/d/abc/edit' } as never),
     ).rejects.toThrow(/not publicly accessible/);
+    expect(service.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects an upload with no file', async () => {
+    await expect(controller.importUpload(authed(), undefined)).rejects.toThrow(/no file/i);
+  });
+
+  it('rejects an unsupported upload type by name', async () => {
+    const file = { buffer: Buffer.from('x'), mimetype: 'image/png', originalname: 'cv.png', size: 1 };
+
+    await expect(controller.importUpload(authed(), file as never)).rejects.toThrow(/image\/png/);
+    expect(storage.putObject).not.toHaveBeenCalled();
+  });
+
+  it('stores the original upload before parsing it', async () => {
+    const file = { buffer: Buffer.from('%PDF'), mimetype: 'application/pdf', originalname: 'cv.pdf', size: 4 };
+
+    await controller.importUpload(authed(), file as never);
+
+    // Storing first is what makes a later extraction failure diagnosable.
+    expect(storage.putObject).toHaveBeenCalled();
+    const key = storage.putObject.mock.calls[0][0];
+    expect(key).toMatch(/^u1\/[0-9a-f-]{36}\.pdf$/);
+    expect(service.save).toHaveBeenCalledWith('u1', '# CV from file', 'upload', key);
+  });
+
+  it('keeps the stored original when extraction fails', async () => {
+    documents.extract.mockRejectedValueOnce(new Error('no extractable text'));
+    const file = { buffer: Buffer.from('%PDF'), mimetype: 'application/pdf', originalname: 'cv.pdf', size: 4 };
+
+    await expect(controller.importUpload(authed(), file as never)).rejects.toThrow(/no extractable text/);
+    expect(storage.putObject).toHaveBeenCalled();
     expect(service.save).not.toHaveBeenCalled();
   });
 });
