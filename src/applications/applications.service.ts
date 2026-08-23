@@ -4,18 +4,38 @@ import { Repository } from 'typeorm';
 import { CvFactEntity } from '../master/entities/cv-fact.entity';
 import { MasterCvService } from '../master/master-cv.service';
 import { JobsService } from '../jobs/jobs.service';
+import { CvPdfService } from '../export/cv-pdf.service';
+import { CvDocxService } from '../export/cv-docx.service';
+import { MinioService } from '../storage/minio.service';
 import { scoreAiTell } from './ai-tell';
-import { ApplicationState, FactSnapshot, RenderProvenance, TailoredBullet } from './application.types';
+import {
+  ApplicationState,
+  ChatRole,
+  FactSnapshot,
+  InputMode,
+  RenderProvenance,
+  TailoredBullet,
+} from './application.types';
 import { diffLines, DiffHunk } from './diff';
 import { CvApplicationEntity } from './entities/cv-application.entity';
+import { CvArtifactEntity } from './entities/cv-artifact.entity';
+import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
 import { EntailService } from './entail.service';
+import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
 
 const REQUESTED_TIER = 'smart';
 
 /** How many of the user's own sentences are carried in as style exemplars (§6.1). */
 const STYLE_EXEMPLAR_COUNT = 5;
+
+/** Bounds worst-case model spend per application (spec §4). */
+const MAX_REVISIONS = 20;
+
+/** Bounds spend per user across all their applications (spec §8.3). */
+const MAX_TURNS_PER_HOUR = 10;
+const RATE_WINDOW_MS = 60 * 60 * 1000;
 
 export interface RenderView {
   render: CvRenderEntity;
@@ -42,6 +62,13 @@ export class ApplicationsService {
     private readonly master: MasterCvService,
     private readonly tailor: TailorService,
     private readonly entail: EntailService,
+    // added in Phase 4:
+    private readonly reviseService: ReviseService,
+    @InjectRepository(CvChatEntity) private readonly chats: Repository<CvChatEntity>,
+    @InjectRepository(CvArtifactEntity) private readonly artifacts: Repository<CvArtifactEntity>,
+    private readonly pdf: CvPdfService,
+    private readonly docx: CvDocxService,
+    private readonly storage: MinioService,
   ) {}
 
   /** Creates an application against the current master, pins it, and generates revision 1. */
@@ -227,6 +254,177 @@ export class ApplicationsService {
       baselineRevisionNo: null,
       hunks: diffLines(pinned.master.markdown, render.markdown),
     };
+  }
+
+  /**
+   * One turn of the revision loop (spec §4). Re-runs both grounding layers: the user's
+   * instruction is untrusted and may ask for a claim the facts do not support.
+   */
+  async revise(
+    userId: string,
+    applicationId: string,
+    instruction: string,
+    inputMode: InputMode,
+  ): Promise<RenderView> {
+    const application = await this.findOwned(userId, applicationId);
+
+    if (application.state === 'revising') {
+      // Two concurrent turns would race for the same revision number and collide on
+      // uq_render_revision, surfacing as an opaque database error instead of this one.
+      throw new ConflictException(`application ${applicationId}: revision already in progress`);
+    }
+
+    if (application.state !== 'in_review') {
+      throw new ConflictException(
+        `application ${applicationId} is in state ${application.state} and cannot be revised`,
+      );
+    }
+
+    if (application.revisionCount >= MAX_REVISIONS) {
+      throw new ConflictException(
+        `application ${applicationId} reached the revision cap of ${MAX_REVISIONS}`,
+      );
+    }
+
+    await this.assertWithinRateLimit(userId);
+
+    const renders = await this.renders.find({
+      where: { applicationId },
+      order: { revisionNo: 'DESC' },
+    });
+    const latest = renders[0];
+    if (!latest) {
+      throw new ConflictException(`application ${applicationId} has no render to revise`);
+    }
+
+    const pinned = await this.master.getVersion(userId, application.masterVersionId);
+    if (!pinned) {
+      throw new Error(
+        `application ${applicationId} pins master version ${application.masterVersionId}, which no longer exists`,
+      );
+    }
+
+    const { job } = await this.jobs.get(userId, application.jobId);
+    if (!job.parsed) {
+      throw new ConflictException(`job ${application.jobId} has no parsed requirements`);
+    }
+
+    const history = await this.chats.find({
+      where: { applicationId },
+      order: { createdAt: 'ASC' },
+    });
+
+    await this.chats.save({
+      applicationId,
+      role: 'user' as ChatRole,
+      content: instruction,
+      inputMode,
+      renderId: null,
+    } as CvChatEntity);
+
+    await this.applications.update(applicationId, { state: 'revising', stateError: null });
+
+    const snapshot = this.toSnapshot(pinned.facts);
+    const revisionNo = latest.revisionNo + 1;
+
+    try {
+      const drafted = await this.reviseService.revise({
+        facts: snapshot,
+        requirements: job.parsed.requirements,
+        jobTitle: job.title,
+        company: job.company,
+        language: application.renderLanguage,
+        styleExemplars: snapshot.slice(0, STYLE_EXEMPLAR_COUNT).map((f) => f.text),
+        previousMarkdown: latest.markdown,
+        history: history.map((turn) => ({ role: turn.role, content: turn.content })),
+        instruction,
+      });
+
+      const validated = await this.entail.validate(drafted.bullets, snapshot);
+
+      const markdown = validated.bullets.map((b) => `- ${b.text}`).join('\n');
+      const provenance: RenderProvenance = {
+        bullets: validated.bullets,
+        droppedBullets: drafted.droppedBullets,
+      };
+
+      const draft: CvRenderEntity = {
+        applicationId,
+        revisionNo,
+        markdown,
+        factsSnapshot: snapshot,
+        provenance,
+        confirmedOverreach: [],
+        aiTellScore: scoreAiTell(markdown).score,
+        createdBy: 'ai',
+        modelUsed: drafted.modelUsed,
+        validatorModelUsed: validated.validatorModelUsed,
+        requestedTier: REQUESTED_TIER,
+        degraded: false,
+        promptVersion: `${drafted.promptVersion}/${validated.validatorPromptVersion}`,
+        idempotencyKey: `${applicationId}:${revisionNo}`,
+      } as unknown as CvRenderEntity;
+
+      const render = await this.renders.save(draft);
+
+      await this.chats.save({
+        applicationId,
+        role: 'assistant' as ChatRole,
+        content: markdown,
+        inputMode: 'text',
+        renderId: render.id,
+      } as CvChatEntity);
+
+      await this.applications.update(applicationId, {
+        state: 'in_review',
+        stateError: null,
+        revisionCount: application.revisionCount + 1,
+      });
+
+      this.logger.log(
+        `revision ${revisionNo} for application ${applicationId}: ${validated.bullets.length} bullets, ` +
+          `${drafted.droppedBullets.length} dropped, model=${drafted.modelUsed}`,
+      );
+
+      return this.toView(render);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      // Never leave the application stuck in `revising` — that state would reject every
+      // later turn as "already in progress" with no way out.
+      await this.applications.update(applicationId, {
+        state: 'generation_failed' as ApplicationState,
+        stateError: message,
+      });
+      this.logger.error(`revision failed for application ${applicationId}: ${message}`);
+      throw cause;
+    }
+  }
+
+  async listChat(userId: string, applicationId: string): Promise<CvChatEntity[]> {
+    await this.findOwned(userId, applicationId);
+    return this.chats.find({ where: { applicationId }, order: { createdAt: 'ASC' } });
+  }
+
+  /**
+   * Spec §8.3. Counts the user's own turns in the last hour across every application.
+   * `cv_chat` has no userId, so the count joins through the applications the user owns —
+   * correct by construction rather than by trusting a denormalised column.
+   */
+  private async assertWithinRateLimit(userId: string): Promise<void> {
+    const since = new Date(Date.now() - RATE_WINDOW_MS);
+    const recent = await this.chats
+      .createQueryBuilder('chat')
+      .innerJoin(CvApplicationEntity, 'app', 'app.id = chat."applicationId"')
+      .where('app."userId" = :userId', { userId })
+      .andWhere('chat.role = :role', { role: 'user' })
+      .andWhere('chat."createdAt" >= :since', { since })
+      .getCount();
+
+    if (recent >= MAX_TURNS_PER_HOUR) {
+      throw new ConflictException(
+        `rate limit reached: ${MAX_TURNS_PER_HOUR} revision turns per hour. Try again later.`,
+      );
+    }
   }
 
   private toSnapshot(facts: CvFactEntity[]): FactSnapshot[] {

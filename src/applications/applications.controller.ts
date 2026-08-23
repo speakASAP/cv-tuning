@@ -12,6 +12,7 @@ import {
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { ReviseDto } from './dto/revise.dto';
 
 interface AuthedRequest {
   user: CvUser;
@@ -55,5 +56,19 @@ export class ApplicationsController {
     @Param('revisionNo', ParseIntPipe) revisionNo: number,
   ) {
     return this.applications.diff(req.user.id, id, revisionNo);
+  }
+
+  @Post(':id/revise')
+  async revise(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReviseDto,
+  ) {
+    return this.applications.revise(req.user.id, id, body.instruction, body.inputMode);
+  }
+
+  @Get(':id/chat')
+  async chat(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.applications.listChat(req.user.id, id);
   }
 }

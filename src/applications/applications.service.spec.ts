@@ -88,6 +88,13 @@ const build = (overrides: Record<string, unknown> = {}) => {
     (overrides.master ?? master) as never,
     (overrides.tailor ?? tailor) as never,
     (overrides.entail ?? entail) as never,
+    // Phase 4 collaborators: not exercised by these (pre-Phase-4) orchestration tests.
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
   );
 
   return { service, applications, renders, jobs, master, tailor, entail };
