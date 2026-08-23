@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
 import { ApplicationsService } from './applications.service';
+import { ConfirmClaimDto } from './dto/confirm-claim.dto';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { ReviseDto } from './dto/revise.dto';
 
@@ -70,5 +71,20 @@ export class ApplicationsController {
   @Get(':id/chat')
   async chat(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.listChat(req.user.id, id);
+  }
+
+  @Post(':id/renders/:revisionNo/confirm-claim')
+  async confirmClaim(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('revisionNo', ParseIntPipe) revisionNo: number,
+    @Body() body: ConfirmClaimDto,
+  ) {
+    return this.applications.confirmClaim(req.user.id, id, revisionNo, body.bulletText, body.decision);
+  }
+
+  @Post(':id/approve')
+  async approve(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.applications.approve(req.user.id, id);
   }
 }

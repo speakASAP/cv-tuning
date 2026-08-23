@@ -11,6 +11,7 @@ import { scoreAiTell } from './ai-tell';
 import {
   ApplicationState,
   ChatRole,
+  ConfirmedClaim,
   FactSnapshot,
   InputMode,
   RenderProvenance,
@@ -403,6 +404,121 @@ export class ApplicationsService {
   async listChat(userId: string, applicationId: string): Promise<CvChatEntity[]> {
     await this.findOwned(userId, applicationId);
     return this.chats.find({ where: { applicationId }, order: { createdAt: 'ASC' } });
+  }
+
+  /**
+   * Spec §6 layer 3. Neither decision spends an LLM call — the text is already written and
+   * already validated — so neither counts against the revision cap. A user must never be
+   * blocked from resolving a claim by a limit that exists to bound model spend.
+   */
+  async confirmClaim(
+    userId: string,
+    applicationId: string,
+    revisionNo: number,
+    bulletText: string,
+    decision: 'confirm' | 'drop',
+  ): Promise<RenderView> {
+    await this.findOwned(userId, applicationId);
+
+    const source = await this.renders.findOne({ where: { applicationId, revisionNo } });
+    if (!source) {
+      throw new NotFoundException(`application ${applicationId} has no revision ${revisionNo}`);
+    }
+
+    const target = source.provenance.bullets.find((b) => b.text === bulletText);
+    if (!target) {
+      // A decision about a bullet that is not in this render is a client bug, not a no-op.
+      throw new NotFoundException(`revision ${revisionNo} has no bullet matching that text`);
+    }
+
+    if (target.verdict !== 'overreach') {
+      throw new ConflictException(
+        `bullet is "${target.verdict}", not "overreach"; it needs no confirm-or-drop decision`,
+      );
+    }
+
+    const bullets =
+      decision === 'drop'
+        ? source.provenance.bullets.filter((b) => b.text !== bulletText)
+        : source.provenance.bullets;
+
+    const confirmedOverreach: ConfirmedClaim[] = [
+      ...source.confirmedOverreach,
+      { bulletText, decision, decidedBy: userId, decidedAt: new Date().toISOString() },
+    ];
+
+    const markdown = bullets.map((b) => `- ${b.text}`).join('\n');
+    const revision = revisionNo + 1;
+
+    const draft: CvRenderEntity = {
+      applicationId,
+      revisionNo: revision,
+      markdown,
+      factsSnapshot: source.factsSnapshot,
+      provenance: { bullets, droppedBullets: source.provenance.droppedBullets },
+      confirmedOverreach,
+      aiTellScore: scoreAiTell(markdown).score,
+      // A human decision, not a generation. Keeps the two apart in the diff chain.
+      createdBy: 'user',
+      modelUsed: source.modelUsed,
+      validatorModelUsed: source.validatorModelUsed,
+      requestedTier: source.requestedTier,
+      degraded: source.degraded,
+      promptVersion: source.promptVersion,
+      idempotencyKey: `${applicationId}:${revision}`,
+    } as unknown as CvRenderEntity;
+
+    const saved = await this.renders.save(draft);
+    this.logger.log(`claim "${bulletText.slice(0, 60)}" ${decision}ed by ${userId} on ${applicationId}`);
+    return this.toView(saved);
+  }
+
+  /**
+   * Approval is a gate, not a warning (spec §5.2). An `overreach` bullet the human has not
+   * ruled on must never reach a downloadable file.
+   */
+  async approve(userId: string, applicationId: string): Promise<CvApplicationEntity> {
+    const application = await this.findOwned(userId, applicationId);
+
+    if (application.state !== 'in_review') {
+      // A transition into `approved`, not an idempotent setter (spec §5.2). Once Task 8 wires
+      // export-on-approve, re-approving a `downloaded` application would silently regenerate
+      // and replace an artifact the user already downloaded — exactly the guarantee spec §6.3
+      // exists to prevent. Matches revise()'s state guard above.
+      throw new ConflictException(
+        `application ${applicationId} is in state ${application.state} and cannot be approved`,
+      );
+    }
+
+    const renders = await this.renders.find({
+      where: { applicationId },
+      order: { revisionNo: 'DESC' },
+    });
+    const latest = renders[0];
+    if (!latest) {
+      throw new ConflictException(`application ${applicationId} has no render to approve`);
+    }
+
+    const decided = new Set(latest.confirmedOverreach.map((c) => c.bulletText));
+    const unresolved = latest.provenance.bullets.filter(
+      (b) => b.verdict === 'overreach' && !decided.has(b.text),
+    );
+
+    if (unresolved.length > 0) {
+      const list = unresolved.map((b) => `"${b.text}"`).join('; ');
+      throw new ConflictException(
+        `${unresolved.length} claim(s) still need a confirm-or-drop decision: ${list}`,
+      );
+    }
+
+    await this.applications.update(applicationId, {
+      state: 'approved' as ApplicationState,
+      approvedAt: new Date(),
+      stateError: null,
+    });
+
+    this.logger.log(`application ${applicationId} approved at revision ${latest.revisionNo}`);
+    return this.findOwned(userId, applicationId);
   }
 
   /**
