@@ -62,6 +62,10 @@ export class NotificationClientService {
       },
       body: JSON.stringify({
         type: 'custom',
+        // Explicit, because channel-registry.service.ts requires either `channel` or
+        // `channelKey` and rejects a payload carrying neither with SEND_FAILED. The nudge
+        // recipient is an email address, so the channel is never in doubt.
+        channel: 'email',
         recipient: input.recipient,
         subject,
         message,

@@ -26,6 +26,9 @@ describe('sendOutcomeNudge', () => {
     expect(body.purpose).toBe('transactional');
     expect(body.service).toBe('cv-tuning');
     expect(body.message).toContain('Acme');
+    // notifications-microservice's channel-registry requires an explicit channel whenever
+    // channelKey is omitted; without it the send fails with SEND_FAILED, not a validation error.
+    expect(body.channel).toBe('email');
   });
 
   it('omits the company rather than printing a placeholder when it is unknown', async () => {
