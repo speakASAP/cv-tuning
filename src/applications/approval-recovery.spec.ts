@@ -170,6 +170,8 @@ function makeHarness(opts: {
     pdf as never,
     docx as never,
     storage as never,
+    // Phase 5: not exercised here, but a real double so an unexpected call fails loudly.
+    { startOutcomeWatch: jest.fn(), deliverSignal: jest.fn() } as never,
   );
 
   return { service, applications, renders, artifacts, artifactRows, pdf, docx, storage, application, rows };

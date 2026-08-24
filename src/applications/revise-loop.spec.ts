@@ -73,6 +73,8 @@ function makeService(overrides: {
     master as never, {} as never, entail as never,
     revise as never, chats as never,
     {} as never, {} as never, {} as never, {} as never,
+    // Phase 5: not exercised here, but a real double so an unexpected call fails loudly.
+    { startOutcomeWatch: jest.fn(), deliverSignal: jest.fn() } as never,
   );
   return { service, applications, renders, chats, revise, entail };
 }

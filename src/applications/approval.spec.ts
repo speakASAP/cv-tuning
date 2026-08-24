@@ -36,6 +36,8 @@ function makeService(render: Record<string, unknown>, state = 'in_review') {
     { render: jest.fn().mockResolvedValue({ content: Buffer.from('p'), sha256: 's', mimeType: 'application/pdf', filename: 'c.pdf' }) } as never,
     { render: jest.fn().mockResolvedValue({ content: Buffer.from('d'), sha256: 's', mimeType: 'application/docx', filename: 'c.docx' }) } as never,
     { putObject: jest.fn().mockResolvedValue('key'), getObject: jest.fn() } as never,
+    // Phase 5: not exercised here, but a real double so an unexpected call fails loudly.
+    { startOutcomeWatch: jest.fn(), deliverSignal: jest.fn() } as never,
   );
   return { service, applications, renders };
 }
