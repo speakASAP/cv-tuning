@@ -16,6 +16,8 @@ import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
 import { ApplicationsService } from './applications.service';
 import { ConfirmClaimDto } from './dto/confirm-claim.dto';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { MarkSentDto } from './dto/mark-sent.dto';
+import { RecordOutcomeDto } from './dto/record-outcome.dto';
 import { ReviseDto } from './dto/revise.dto';
 
 interface AuthedRequest {
@@ -98,6 +100,31 @@ export class ApplicationsController {
   @Post(':id/retry-export')
   async retryExport(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.retryExport(req.user.id, id);
+  }
+
+  /**
+   * Spec §5. User-asserted submission — the app cannot observe a send on a third-party portal.
+   */
+  @Post(':id/mark-sent')
+  async markSent(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: MarkSentDto,
+  ) {
+    return this.applications.markSent(
+      req.user.id,
+      id,
+      body.sentAt ? new Date(body.sentAt) : undefined,
+    );
+  }
+
+  @Post(':id/outcome')
+  async recordOutcome(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RecordOutcomeDto,
+  ) {
+    return this.applications.recordOutcome(req.user.id, id, body.outcome);
   }
 
   @Get(':id/renders/:revisionNo/download/:kind')

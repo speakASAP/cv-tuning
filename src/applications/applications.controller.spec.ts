@@ -82,3 +82,40 @@ describe('ApplicationsController', () => {
     expect(applications.retryExport).toHaveBeenCalledWith('u2', 'a1');
   });
 });
+
+describe('outcome endpoints', () => {
+  it('passes the token user id, never a body-supplied one, to markSent', async () => {
+    const service = { markSent: jest.fn(async () => ({ state: 'marked_sent' })) };
+    const controller = new ApplicationsController(service as any);
+
+    await controller.markSent({ user: { id: 'user-1' } } as never, 'app-1', {});
+
+    expect(service.markSent).toHaveBeenCalledWith('user-1', 'app-1', undefined);
+  });
+
+  it('parses a supplied sentAt into a Date before it reaches the service', async () => {
+    const service = { markSent: jest.fn(async () => ({ state: 'marked_sent' })) };
+    const controller = new ApplicationsController(service as any);
+
+    await controller.markSent({ user: { id: 'user-1' } } as never, 'app-1', {
+      sentAt: '2026-08-20T09:00:00.000Z',
+    });
+
+    expect(service.markSent).toHaveBeenCalledWith(
+      'user-1',
+      'app-1',
+      new Date('2026-08-20T09:00:00.000Z'),
+    );
+  });
+
+  it('forwards the outcome value', async () => {
+    const service = { recordOutcome: jest.fn(async () => ({ outcome: 'offer' })) };
+    const controller = new ApplicationsController(service as any);
+
+    await controller.recordOutcome({ user: { id: 'user-1' } } as never, 'app-1', {
+      outcome: 'offer',
+    });
+
+    expect(service.recordOutcome).toHaveBeenCalledWith('user-1', 'app-1', 'offer');
+  });
+});
