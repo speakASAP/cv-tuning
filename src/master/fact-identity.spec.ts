@@ -13,6 +13,7 @@ const extracted = (text: string, position: number): ContextualFact => ({
   payload: {},
   metric: null,
   section: null,
+  title: null,
   org: null,
   period: null,
 });

@@ -122,6 +122,7 @@ export class MasterCvService {
             metric: f.metric,
             // Derived from the markdown headings, not from the model (spec §4.1/§6).
             section: f.section,
+            title: f.title,
             org: f.org,
             period: f.period,
             contentHash: f.contentHash,

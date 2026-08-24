@@ -43,13 +43,15 @@ export interface FactSnapshot {
   /**
    * Where the fact sat in the master CV's heading structure, derived in code at extraction
    * time (`master/fact-provenance.ts`). Snapshotted with the fact so a render can state the
-   * employer and period it was generated against even after the master CV is re-titled.
+   * job title, employer, and period it was generated against even after the master CV is
+   * re-titled.
    *
    * Null when the fact could not be confidently mapped, which is a normal outcome for a
    * heading-less CV. Consumers must treat null as "unknown" and print nothing — never
    * substitute a nearby value.
    */
   section: string | null;
+  title: string | null;
   org: string | null;
   period: string | null;
 }

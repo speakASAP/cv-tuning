@@ -58,7 +58,11 @@ infrastructure. All controllers are `@UseGuards(CvAuthGuard)` under `api/*`; onl
 **master/** — the user's one master CV. Markdown is the user-facing source of truth; the
 fact graph is a *derived, versioned projection* (spec §4.1). On save, facts are re-extracted
 and IDs re-matched by content hash + position (`fact-identity.ts`) so unchanged bullets keep
-their IDs and existing provenance stays valid. A mismatch between the stored
+their IDs and existing provenance stays valid. Derived heading context
+(`section`/`title`/`org`/`period`) sits deliberately **outside** `hashFactContent`: re-titling a
+job heading must not orphan every fact under it and break the provenance links tailored CVs
+already hold. Those columns are nullable and never backfilled — a guessed job title is
+fabrication; pre-existing rows pick one up on the next master save. A mismatch between the stored
 `facts_extracted_from_markdown_sha` and the current Markdown **raises** — it never degrades
 quietly. Importers (`gdocs`, `linkedin`, `document`) all normalize into the same Markdown.
 
@@ -124,12 +128,18 @@ because pdfkit hashes it into the PDF `/ID` trailer, and spec §6.3 reuses that 
 artifact idempotency — an unpinned CreationDate would make the hash wall-clock dependent.
 Export is a real multi-section CV: `render-markdown.ts#buildRenderMarkdown` takes the render's
 `FactSnapshot[]` and groups tailored bullets by each source fact's derived `section`, then by its
-`(org, period)` pair. Nulls print as nothing and are NEVER filled from a neighbouring entry, and a
-bullet whose fact has a null section (or whose `sourceFactId` is unresolvable) goes to a trailing
-`Additional Highlights` section rather than being dropped. Ordering is deterministic by contract —
-first appearance in the bullets array, catch-all last — because spec §6.3 reuses the artifact
-sha256 for idempotency. Facts carry no job title, so entries are written title-less as
-`### — Org (Period)`; per-entry titles still need the master CV parsed structurally at import.
+`(title, org, period)` triple. Nulls print as nothing and are NEVER filled from a neighbouring
+entry, and a bullet whose fact has a null section (or whose `sourceFactId` is unresolvable) goes
+to a trailing `Additional Highlights` section rather than being dropped. Ordering is deterministic
+by contract — first appearance in the bullets array, catch-all last — because spec §6.3 reuses the
+artifact sha256 for idempotency. Entries carry the job title derived from the master's own
+`### Role — Org (Period)` heading, so an entry reads `### Senior Developer — Acme (2019-2024)`; a
+title that could not be derived keeps the title-less `### — Org (Period)` form. Nulls are values
+in the grouping key, not wildcards: a promotion inside one company over the same period stays two
+entries, and a title-less bullet never joins a titled one. The builder also carries the master's
+own contact line(s) (email/phone/links) through into the render, joined with ` | ` — the exact
+separator `cv-document.ts` splits on, which is what makes the `confirmClaim` re-render
+byte-idempotent instead of duplicating or dropping the block.
 
 **Immutability rule (spec §4.2):** `cv_application.master_version_id` pins an immutable
 master snapshot and never follows `is_current`; `cv_render.facts_snapshot` stores the facts

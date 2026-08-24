@@ -686,6 +686,7 @@ export class ApplicationsService {
       kind: fact.kind,
       // Carried through so a render stays reproducible after the master headings change.
       section: fact.section,
+      title: fact.title,
       org: fact.org,
       period: fact.period,
     }));

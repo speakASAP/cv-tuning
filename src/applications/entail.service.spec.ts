@@ -12,8 +12,8 @@ const aiReturning = (payload: unknown, degraded = false) => ({
 });
 
 const facts: FactSnapshot[] = [
-  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role', section: 'Experience', org: 'Acme Corp', period: '2019-2024' },
-  { factId: 'f2', text: 'Ran PostgreSQL in production', kind: 'achievement', section: 'Experience', org: 'Acme Corp', period: '2019-2024' },
+  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role', section: 'Experience', title: 'Senior Developer', org: 'Acme Corp', period: '2019-2024' },
+  { factId: 'f2', text: 'Ran PostgreSQL in production', kind: 'achievement', section: 'Experience', title: 'Senior Developer', org: 'Acme Corp', period: '2019-2024' },
 ];
 
 const bullet = (text: string, sourceFactId = 'f1') => ({

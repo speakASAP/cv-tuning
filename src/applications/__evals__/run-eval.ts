@@ -52,7 +52,7 @@ interface Fixture {
 // No heading context: these fixtures are hand-written facts with no source markdown to
 // derive it from. Nulls keep the fixture text — and therefore the recorded baseline —
 // byte-identical to `docs/evals/2026-08-24-grounding-baseline.md`.
-const NO_CONTEXT = { section: null, org: null, period: null };
+const NO_CONTEXT = { section: null, title: null, org: null, period: null };
 
 const BASE_FACTS: FactSnapshot[] = [
   { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role', ...NO_CONTEXT },

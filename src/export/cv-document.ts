@@ -52,13 +52,14 @@ export interface CvDocument {
  * Title, org, and period are each independently optional AFTER the em dash, which stays
  * mandatory as the separator. That admits four further forms, all of which
  * `render-markdown.ts#buildRenderMarkdown` emits, because a fact carries a derived
- * `org`/`period` (either of which may be null) but nothing in the fact graph carries a job
- * title:
+ * `title`/`org`/`period` and any of the three may be null (a heading that does not clearly
+ * split as `Role — Company` yields nulls for all three rather than a plausible-looking guess):
  *   `— Acme (2019-2024)` -> {null, 'Acme', '2019-2024'}
  *   `— Acme`             -> {null, 'Acme', null}
  *   `— (2019-2024)`      -> {null, null, '2019-2024'}
  *   `—`                  -> {null, null, null}  (an entry that resets attribution and no more)
- * Inventing a title would put a fabrication on the fields an employer judges a CV by; dropping
+ * Inventing a title would put a fabrication on the fields an employer judges a CV by (which is
+ * why the title is derived in code from the master's own heading, never asked of a model); dropping
  * the org to dodge the missing title would lose real information; and the bare `—` form exists
  * so a fully unattributed group of bullets cannot silently attach to the entry above it and
  * inherit somebody else's employer.

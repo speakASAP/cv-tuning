@@ -2,6 +2,9 @@ import { FactSnapshot, TailoredBullet } from './application.types';
 
 const H1 = /^#\s+(.+?)\s*$/;
 
+/** A markdown list or blockquote marker: structure, never contact detail. */
+const LIST_OR_QUOTE = /^(?:[-*+]\s|>)/;
+
 /**
  * Heading for bullets whose source fact has no derivable `section` — either the fact predates
  * `section`/`org`/`period` (the migration deliberately did not backfill), the master CV had no
@@ -34,8 +37,10 @@ const EM_DASH = '—';
  * document that goes to an employer.
  *
  * Nulls print as nothing and are never filled from a neighbour (see `GENERAL_SECTION` and
- * `entryHeading`). Facts carry no job title — nothing in the fact graph does — so entries are
- * written title-less, as `### — Org (Period)`.
+ * `entryHeading`). The job title is derived the same way, from the `### Role — Org (Period)`
+ * heading, so an entry reads `### Senior Developer — Acme (2019-2024)`; an entry whose title
+ * could not be derived keeps the older title-less `### — Acme (2019-2024)` form rather than
+ * borrowing a neighbour's role.
  */
 export class MissingMasterNameError extends Error {
   constructor() {
@@ -72,8 +77,11 @@ export function extractH1Name(markdown: string): string {
   return matches[0][1].trim();
 }
 
-/** One `### ` entry under a section: a distinct (org, period) pair and the bullets under it. */
+/**
+ * One `### ` entry under a section: a distinct (title, org, period) triple and its bullets.
+ */
 interface RenderEntry {
+  title: string | null;
   org: string | null;
   period: string | null;
   bullets: string[];
@@ -87,7 +95,7 @@ interface RenderSection {
 /**
  * Builds structured render markdown: H1 name (from `sourceMarkdown`) followed by one H2 per
  * section the tailored bullets' source facts came from, each holding one H3 entry per distinct
- * (org, period).
+ * (title, org, period), preceded by the master's own contact line(s).
  *
  * `sourceMarkdown` is either the pinned master's markdown (generate/revise) or a prior
  * render's own markdown (confirmClaim) — both carry the same single H1 by construction, since
@@ -108,9 +116,10 @@ interface RenderSection {
 export function buildRenderMarkdown(
   sourceMarkdown: string,
   bullets: Pick<TailoredBullet, 'text' | 'sourceFactId'>[],
-  facts: Pick<FactSnapshot, 'factId' | 'section' | 'org' | 'period'>[],
+  facts: Pick<FactSnapshot, 'factId' | 'section' | 'title' | 'org' | 'period'>[],
 ): string {
   const name = extractH1Name(sourceMarkdown);
+  const contact = extractContactLines(sourceMarkdown);
 
   const byFactId = new Map(facts.map((f) => [f.factId, f]));
   const sections: RenderSection[] = [];
@@ -121,6 +130,7 @@ export function buildRenderMarkdown(
     // reviewed. It lands in the general section, with no org or period attributed to it.
     const fact = byFactId.get(bullet.sourceFactId);
     const heading = fact?.section ?? GENERAL_SECTION;
+    const title = normalizeHeadingField(fact?.title ?? null);
     const org = fact?.org ?? null;
     const period = fact?.period ?? null;
 
@@ -130,12 +140,23 @@ export function buildRenderMarkdown(
       sections.push(section);
     }
 
-    // Entry identity is the exact (org, period) pair, nulls included: two stints at one
-    // employer are two entries, and merging them would assert a continuous tenure the CV
-    // never claimed. Equally, an org-less bullet never joins an org'd entry.
-    let entry = section.entries.find((e) => e.org === org && e.period === period);
+    // Entry identity is the exact (title, org, period) TRIPLE, nulls included.
+    //
+    // Why the title is part of the key: a promotion inside one company ("Lead Developer" then
+    // "Principal Engineer" at Acme, overlapping periods) is two real entries on a CV, and
+    // keying on (org, period) alone would merge them and silently discard one of the two job
+    // titles the master CV actually states. The reverse case — the same role at two employers
+    // — was already two entries and stays two, since the org differs.
+    //
+    // Nulls are values, not wildcards: a title-less bullet never joins a titled entry at the
+    // same employer, because "unknown role" is not "the role of whatever entry sits next to
+    // it". Same rule that already keeps two stints at one employer apart, and that keeps an
+    // org-less bullet out of an org'd entry.
+    let entry = section.entries.find(
+      (e) => e.title === title && e.org === org && e.period === period,
+    );
     if (!entry) {
-      entry = { org, period, bullets: [] };
+      entry = { title, org, period, bullets: [] };
       section.entries.push(entry);
     }
 
@@ -150,6 +171,12 @@ export function buildRenderMarkdown(
   ];
 
   const parts = [`# ${name}`];
+  // Re-emitted in `cv-document.ts`'s position for contact detail: after the H1, before the
+  // first `## `. Joined with ` | ` because that is the separator the parser splits on, which
+  // is what makes this round-trip stable (see `extractContactLines`).
+  if (contact.length > 0) {
+    parts.push(contact.join(' | '));
+  }
   for (const section of ordered) {
     parts.push(`## ${section.heading}`);
     for (const entry of section.entries) {
@@ -169,12 +196,13 @@ export function buildRenderMarkdown(
 }
 
 /**
- * `— Acme (2019-2024)`, `— Acme`, `— (2019-2024)`, or a bare `—`.
+ * `Senior Developer — Acme (2019-2024)`, `— Acme`, `— (2019-2024)`, or a bare `—`.
  *
- * The leading em dash marks the absent title: `cv-document.ts`'s `ENTRY_HEADING` requires the
- * em dash as the title/org separator (a hyphen is too common inside real org names to use),
- * and no fact carries a job title, so every entry this builder writes is title-less. A null
- * org or period contributes nothing — never a value borrowed from another entry.
+ * The em dash is `cv-document.ts`'s `ENTRY_HEADING` separator (a hyphen is too common inside
+ * real titles and org names to use), and it is emitted unconditionally — a LEADING em dash is
+ * how a title-less entry is written, which is the shape every entry had before facts carried
+ * `title`, and still the shape whenever the title could not be derived. A null title, org, or
+ * period contributes nothing — never a value borrowed from another entry.
  *
  * An entry with NEITHER org nor period still gets its bare `—` heading rather than no heading
  * at all. This is load-bearing, not cosmetic: `cv-document.ts` attaches a bullet to the entry
@@ -187,7 +215,8 @@ export function buildRenderMarkdown(
 function entryHeading(entry: RenderEntry): string {
   const period = entry.period ? `(${entry.period})` : '';
   const org = entry.org ?? '';
-  return [EM_DASH, org, period].filter(Boolean).join(' ');
+  const title = entry.title ?? '';
+  return [title, EM_DASH, org, period].filter(Boolean).join(' ');
 }
 
 /**
@@ -206,4 +235,78 @@ function normalizeBulletText(text: string): string {
   // convention this markdown is built for — neutralize it without disturbing the rest of
   // the sentence, e.g. "# 1 revenue driver" -> "1 revenue driver".
   return collapsed.replace(/^#+\s*/, '');
+}
+
+/**
+ * The contact line(s) the master CV states between its H1 and its first `## ` heading —
+ * email, phone, links. `cv-document.ts` parses exactly that position into `contact.parts`
+ * (splitting on `|`) and both writers render them, so without this the exported CV goes out
+ * with no way for an employer to reply to it.
+ *
+ * IDEMPOTENCY IS THE HARD PART. `confirmClaim` (applications.service.ts) feeds a PRIOR
+ * RENDER'S OWN markdown back in as `sourceMarkdown`, so this re-reads output this function
+ * itself wrote. It round-trips exactly because the emitted form is the canonical one: parts
+ * are split on `|`, trimmed, whitespace-collapsed, and re-joined with ` | ` on a single line,
+ * so extracting from that line yields the identical array. Pinned by a multi-pass test in
+ * `render-markdown.spec.ts` — a second pass that duplicated or dropped the block would only
+ * surface in production, on the artifact the user downloads.
+ *
+ * Only lines that are plainly not structure are taken. A `#`/`##`/`###` heading, a `- `/`* `
+ * bullet, or a `>` quote before the first section is markdown structure, not contact detail,
+ * and swallowing one would put a CV bullet in the exported document's header. Everything else
+ * is kept verbatim: a contact line legitimately contains em dashes and parentheses
+ * ("Prague, CZ — open to relocation (EU)") and is never parsed as an entry heading, because
+ * this position is read before any section exists.
+ *
+ * A master with no contact block yields an empty array, which emits nothing. That is a normal
+ * input, not a failure.
+ */
+function extractContactLines(markdown: string): string[] {
+  const parts: string[] = [];
+  let seenH1 = false;
+
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // The first `## ` ends the contact region; everything after it belongs to a section.
+    if (line.startsWith('## ')) break;
+
+    if (H1.test(line)) {
+      seenH1 = true;
+      continue;
+    }
+
+    // Before the H1 there is nothing to attach contact detail to, and after a `#`, `-`, `*`,
+    // or `>` marker the line is structure. Skipped rather than raised: `extractH1Name` above
+    // already owns the "this document does not state a name" failure, and a stray marker line
+    // is not a reason to refuse to export a CV that is otherwise complete.
+    if (!seenH1 || line.startsWith('#') || LIST_OR_QUOTE.test(line)) continue;
+
+    parts.push(
+      ...line
+        .split('|')
+        .map((part) => part.replace(/\s+/g, ' ').trim())
+        .filter(Boolean),
+    );
+  }
+
+  return parts;
+}
+
+/**
+ * Makes a derived field safe to write inside a `### ` entry heading.
+ *
+ * A job title comes from the user's own master markdown, so it can contain anything they
+ * typed — including the em dash `cv-document.ts` uses as the title/org separator, which would
+ * make `### Lead — Deputy — Acme (2019)` re-parse as an ambiguous heading and silently
+ * relabel the employer, and newlines, which would break the one-heading-per-line parse
+ * outright. Both are neutralised rather than dropped: losing a real job title is a silent
+ * loss, and mangling the employer is a fabrication. The em dash becomes a hyphen, which reads
+ * naturally inside a title and is explicitly NOT a separator in `ENTRY_HEADING`.
+ */
+function normalizeHeadingField(value: string | null): string | null {
+  if (value === null) return null;
+  const cleaned = value.replace(/\s+/g, ' ').replace(new RegExp(EM_DASH, 'g'), '-').trim();
+  return cleaned.length > 0 ? cleaned : null;
 }

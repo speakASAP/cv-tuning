@@ -11,7 +11,7 @@ export interface StoredFact {
  * Where a fact sits in the master CV's heading structure, DERIVED IN CODE by walking the
  * markdown headings (`fact-provenance.ts`) — never reported by the extraction model.
  *
- * Letting the model name the employer or the date range would create a fabrication surface
+ * Letting the model name the job title, the employer, or the date range would create a fabrication surface
  * on exactly the fields an employer judges a CV by, which is what spec §6 exists to
  * prevent. Every field is null when the fact could not be confidently mapped: a wrong
  * employer on a CV is worse than an absent one.
@@ -19,6 +19,8 @@ export interface StoredFact {
 export interface FactContext {
   /** The H2 the fact sits under, e.g. "Experience". */
   section: string | null;
+  /** The role from a `### Role — Company (period)` entry heading, e.g. "Senior Developer". */
+  title: string | null;
   /** The employer/institution from a `### Role — Company (period)` entry heading. */
   org: string | null;
   /** The parenthesised date range from that entry heading, verbatim. */
@@ -46,7 +48,7 @@ export type MatchedFact = ContextualFact & {
  * Identity of a fact is its normalised text. Whitespace and casing changes are not
  * edits, so they must not orphan a fact and break every provenance link pointing at it.
  *
- * DERIVED CONTEXT IS DELIBERATELY EXCLUDED. If `section`/`org`/`period` entered this hash,
+ * DERIVED CONTEXT IS DELIBERATELY EXCLUDED. If `section`/`title`/`org`/`period` entered this hash,
  * re-titling a job heading would orphan every fact under it and break every provenance link
  * a tailored CV already holds. Pinned by `fact-provenance.spec.ts`.
  */

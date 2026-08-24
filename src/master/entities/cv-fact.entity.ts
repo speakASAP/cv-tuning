@@ -34,9 +34,9 @@ export class CvFactEntity {
 
   /**
    * Derived heading context (spec §4.1). Walked out of the master markdown in code
-   * (`fact-provenance.ts`), NEVER reported by the extraction model — an LLM naming the
-   * employer or the date range is a fabrication surface on the fields an employer judges a
-   * CV by. Null whenever the fact could not be confidently mapped to a heading block; a
+   * (`fact-provenance.ts`), NEVER reported by the extraction model — an LLM naming the job
+   * title, the employer, or the date range is a fabrication surface on the fields an employer
+   * judges a CV by. Null whenever the fact could not be confidently mapped to a heading block; a
    * wrong employer is worse than an absent one, and heading-less CVs are a valid input.
    *
    * Deliberately NOT part of `contentHash`: re-titling a job heading must not orphan every
@@ -44,6 +44,10 @@ export class CvFactEntity {
    */
   @Column({ type: 'text', nullable: true })
   section!: string | null;
+
+  /** The role from a `### Role — Company (period)` heading. Nullable with no backfill. */
+  @Column({ type: 'text', nullable: true })
+  title!: string | null;
 
   @Column({ type: 'text', nullable: true })
   org!: string | null;

@@ -25,25 +25,34 @@ export interface HeadingBlock {
   /** Normalised form, matching `hashFactContent`'s normalisation exactly. */
   normalised: string;
   section: string | null;
+  /** The role from a `### Role — Company (period)` entry heading. */
+  title: string | null;
   org: string | null;
   period: string | null;
 }
 
 /**
- * Splits `Role — Company (period)` — the shape `linkedin.importer.ts` guarantees.
+ * Splits `Role — Company (period)` — the shape `linkedin.importer.ts` guarantees — into its
+ * `{title, org, period}` parts.
  *
- * Deliberately conservative. `section`/`org`/`period` are derived in code precisely so the
- * model never gets to report the employer or the date range (spec §6), and a heading that
- * does not clearly match the shape yields nulls rather than a plausible-looking split. A
- * wrong employer on a CV an employer reads is worse than an absent one.
+ * Deliberately conservative. All three are derived in code precisely so the model never gets
+ * to report the job title, the employer, or the date range (spec §6), and a heading that does
+ * not clearly match the shape yields nulls rather than a plausible-looking split. A wrong job
+ * title or employer on a CV an employer reads is worse than an absent one, so the three
+ * fields fall to null together: whatever makes the org untrustworthy makes the title
+ * untrustworthy for the same reason.
  */
-export function parseEntryHeading(heading: string): { org: string | null; period: string | null } {
+export function parseEntryHeading(heading: string): {
+  title: string | null;
+  org: string | null;
+  period: string | null;
+} {
   const parts = heading.split(EM_DASH);
 
   // Exactly one separator, or the split is ambiguous (`Lead — Acme — Berlin`) and we
   // cannot say which half is the employer.
   if (parts.length !== 2) {
-    return { org: null, period: null };
+    return { title: null, org: null, period: null };
   }
 
   const role = parts[0].trim();
@@ -52,7 +61,7 @@ export function parseEntryHeading(heading: string): { org: string | null; period
   // Both halves must be present; `— Acme (2019)` is not the recognised shape, so the
   // remainder is not provably an employer.
   if (role.length === 0 || rest.length === 0) {
-    return { org: null, period: null };
+    return { title: null, org: null, period: null };
   }
 
   let period: string | null = null;
@@ -72,7 +81,12 @@ export function parseEntryHeading(heading: string): { org: string | null; period
     }
   }
 
-  return { org: rest.length > 0 ? rest : null, period };
+  // `role` is the title. It is only trusted in the SAME shape that makes the org trustworthy
+  // — a heading that does not clearly split as `Role — Company` yields nulls above, for the
+  // title exactly as for the employer. An un-dashed `### Data Engineer` is as likely a
+  // section label as a job title, and a guessed job title is a fabrication on a field an
+  // employer judges a CV by (spec §6).
+  return { title: role, org: rest.length > 0 ? rest : null, period };
 }
 
 /** Index of the `(` that matches the final `)`, or null when the parens are unbalanced. */
@@ -99,6 +113,7 @@ function findMatchingOpenParen(text: string): number | null {
 export function parseHeadingBlocks(markdown: string): HeadingBlock[] {
   const blocks: HeadingBlock[] = [];
   let section: string | null = null;
+  let title: string | null = null;
   let org: string | null = null;
   let period: string | null = null;
   let inFence = false;
@@ -117,18 +132,21 @@ export function parseHeadingBlocks(markdown: string): HeadingBlock[] {
     const heading = HEADING.exec(rawLine);
     if (heading) {
       const level = heading[1].length;
-      const title = heading[2].trim();
+      const headingText = heading[2].trim();
 
       if (level === 1) {
         section = null;
+        title = null;
         org = null;
         period = null;
       } else if (level === 2) {
-        section = title.length > 0 ? title : null;
+        section = headingText.length > 0 ? headingText : null;
+        title = null;
         org = null;
         period = null;
       } else {
-        const entry = parseEntryHeading(title);
+        const entry = parseEntryHeading(headingText);
+        title = entry.title;
         org = entry.org;
         period = entry.period;
       }
@@ -140,7 +158,7 @@ export function parseHeadingBlocks(markdown: string): HeadingBlock[] {
       continue;
     }
 
-    blocks.push({ line, normalised: normalise(line), section, org, period });
+    blocks.push({ line, normalised: normalise(line), section, title, org, period });
   }
 
   return blocks;
@@ -189,7 +207,7 @@ export function attachFactContext<T extends ExtractedFact>(
 
     if (matches.length === 0) {
       unmapped.push(fact.text);
-      return { ...fact, section: null, org: null, period: null };
+      return { ...fact, section: null, title: null, org: null, period: null };
     }
 
     return {
@@ -197,6 +215,7 @@ export function attachFactContext<T extends ExtractedFact>(
       // Each field is agreed independently: duplicate bullets under two employers still
       // agree on the section, and losing that would discard information we do have.
       section: agree(matches.map((b) => b.section)),
+      title: agree(matches.map((b) => b.title)),
       org: agree(matches.map((b) => b.org)),
       period: agree(matches.map((b) => b.period)),
     };

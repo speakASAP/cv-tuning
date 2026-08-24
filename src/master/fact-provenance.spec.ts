@@ -17,6 +17,7 @@ const fact = (text: string, position: number): ExtractedFact => ({
 describe('parseEntryHeading', () => {
   it('splits the canonical em-dash form the LinkedIn importer emits', () => {
     expect(parseEntryHeading('Senior Developer — Acme Corp (Jan 2019 – Dec 2024)')).toEqual({
+      title: 'Senior Developer',
       org: 'Acme Corp',
       period: 'Jan 2019 – Dec 2024',
     });
@@ -24,6 +25,7 @@ describe('parseEntryHeading', () => {
 
   it('reads an entry with no period, since Started On may be blank in a LinkedIn export', () => {
     expect(parseEntryHeading('Senior Developer — Acme Corp')).toEqual({
+      title: 'Senior Developer',
       org: 'Acme Corp',
       period: null,
     });
@@ -32,6 +34,7 @@ describe('parseEntryHeading', () => {
   it('keeps a hyphen inside the company name rather than splitting on it', () => {
     // The separator is an em dash; a hyphenated company must not be mistaken for one.
     expect(parseEntryHeading('Engineer — Hewlett-Packard (2010 – 2012)')).toEqual({
+      title: 'Engineer',
       org: 'Hewlett-Packard',
       period: '2010 – 2012',
     });
@@ -39,6 +42,7 @@ describe('parseEntryHeading', () => {
 
   it('keeps parentheses inside the company name when there is also a trailing period', () => {
     expect(parseEntryHeading('Engineer — Acme (Europe) Ltd (2010 – 2012)')).toEqual({
+      title: 'Engineer',
       org: 'Acme (Europe) Ltd',
       period: '2010 – 2012',
     });
@@ -46,6 +50,7 @@ describe('parseEntryHeading', () => {
 
   it('treats a lone trailing parenthesised group as the period, not part of the org', () => {
     expect(parseEntryHeading('Consultant — Beta GmbH (2021)')).toEqual({
+      title: 'Consultant',
       org: 'Beta GmbH',
       period: '2021',
     });
@@ -54,31 +59,56 @@ describe('parseEntryHeading', () => {
   it('returns nulls when there is no em-dash separator at all', () => {
     // Free-form markdown from a gdocs import has no guaranteed shape. Guessing that the
     // whole heading is the employer would print an invented employer onto a real CV.
-    expect(parseEntryHeading('Various freelance projects')).toEqual({ org: null, period: null });
+    expect(parseEntryHeading('Various freelance projects')).toEqual({
+      title: null,
+      org: null,
+      period: null,
+    });
   });
 
   it('returns nulls when the em dash has nothing after it', () => {
-    expect(parseEntryHeading('Senior Developer —')).toEqual({ org: null, period: null });
+    expect(parseEntryHeading('Senior Developer —')).toEqual({ title: null, org: null, period: null });
   });
 
   it('returns nulls when the em dash has nothing before it', () => {
     // Without a role part the shape is not the one we recognise, so we cannot claim the
     // remainder is an employer.
-    expect(parseEntryHeading('— Acme Corp (2019)')).toEqual({ org: null, period: null });
+    expect(parseEntryHeading('— Acme Corp (2019)')).toEqual({ title: null, org: null, period: null });
   });
 
   it('returns nulls when more than one em dash makes the split ambiguous', () => {
-    expect(parseEntryHeading('Lead — Acme — Berlin (2019)')).toEqual({ org: null, period: null });
+    expect(parseEntryHeading('Lead — Acme — Berlin (2019)')).toEqual({ title: null, org: null, period: null });
   });
 
   it('leaves the org intact when the parenthesised group is unbalanced', () => {
     // "(2019" never closes, so it is not a period group; better to keep it in the org than
     // to invent a period from a broken shape.
-    expect(parseEntryHeading('Engineer — Acme (2019')).toEqual({ org: 'Acme (2019', period: null });
+    expect(parseEntryHeading('Engineer — Acme (2019')).toEqual({
+      title: 'Engineer',
+      org: 'Acme (2019',
+      period: null,
+    });
+  });
+
+  it('keeps the title verbatim, including a hyphen the em-dash split must not touch', () => {
+    // "Full-Stack" is a hyphen inside a title, not a separator: splitting on hyphens would
+    // shred a real job title into a plausible-looking wrong one.
+    expect(parseEntryHeading('Full-Stack Developer — Acme (2019)')).toEqual({
+      title: 'Full-Stack Developer',
+      org: 'Acme',
+      period: '2019',
+    });
+  });
+
+  it('returns a null title for a heading with no em dash, matching org/period', () => {
+    // An un-dashed heading is not provably `Role — Company`; `Various freelance projects` is
+    // as likely a section label as a job title. A guessed job title is a fabrication on a
+    // field an employer judges a CV by, so all three fields fall to null together.
+    expect(parseEntryHeading('Data Engineer')).toEqual({ title: null, org: null, period: null });
   });
 
   it('returns nulls for an empty heading', () => {
-    expect(parseEntryHeading('')).toEqual({ org: null, period: null });
+    expect(parseEntryHeading('')).toEqual({ title: null, org: null, period: null });
   });
 });
 
@@ -114,6 +144,22 @@ describe('parseHeadingBlocks', () => {
         period: '2019 – 2024',
       }),
     );
+  });
+
+  it('carries the job title from the entry heading onto every block under it', () => {
+    // The title lives only in the markdown heading; nothing else in the fact graph has it,
+    // and it must never be asked of the extraction model.
+    const blocks = parseHeadingBlocks(MARKDOWN);
+    const churn = blocks.find((b) => b.line.includes('Cut churn'));
+
+    expect(churn).toEqual(expect.objectContaining({ title: 'Senior Developer' }));
+  });
+
+  it('leaves the title null in a section with no entry headings', () => {
+    const blocks = parseHeadingBlocks(MARKDOWN);
+    const python = blocks.find((b) => b.line.includes('Python'));
+
+    expect(python).toEqual(expect.objectContaining({ title: null }));
   });
 
   it('switches entry when a later H3 appears', () => {
@@ -314,6 +360,39 @@ describe('attachFactContext', () => {
     expect(attached.org).toBeNull();
   });
 
+  it('attaches the job title alongside section, org and period', () => {
+    const [attached] = attachFactContext(MARKDOWN, [fact('Cut churn 23%', 0)]);
+
+    expect(attached.title).toBe('Senior Developer');
+  });
+
+  it('leaves the title null when duplicate lines disagree about it', () => {
+    // Same rule as org: no confident answer means null, never a majority guess.
+    const markdown = [
+      '## Experience',
+      '',
+      '### Lead — Acme Corp (2020)',
+      '',
+      '- Mentored juniors',
+      '',
+      '### Principal — Acme Corp (2020)',
+      '',
+      '- Mentored juniors',
+    ].join('\n');
+
+    const [attached] = attachFactContext(markdown, [fact('Mentored juniors', 0)]);
+
+    expect(attached.title).toBeNull();
+    // The org and period still agree, so they survive — fields are agreed independently.
+    expect(attached.org).toBe('Acme Corp');
+  });
+
+  it('leaves the title null for a fact under no entry heading', () => {
+    const [attached] = attachFactContext(MARKDOWN, [fact('Python', 0)]);
+
+    expect(attached.title).toBeNull();
+  });
+
   it('returns an empty array for no facts', () => {
     expect(attachFactContext(MARKDOWN, [])).toEqual([]);
   });
@@ -346,5 +425,32 @@ describe('derived context and fact identity', () => {
     expect(matched[0].isNew).toBe(false);
     // ...and the new context did land, so this is not passing because derivation no-opped.
     expect(matched[0].org).toBe('Acme Corporation GmbH');
+  });
+
+  it('does not change a fact id when only the job TITLE in the heading is edited', () => {
+    // Same guarantee as org/period, pinned separately because `title` is a new field: a
+    // promotion re-titling the heading (`Developer` -> `Senior Developer`) must not orphan
+    // every fact under it and break the provenance links tailored CVs already hold.
+    const { hashFactContent, matchFactIds } = require('./fact-identity');
+    const withTitle = (title: string) =>
+      ['## Experience', '', `### ${title} — Acme Corp (2019 – 2024)`, '', '- Cut churn 23%'].join('\n');
+
+    const before = attachFactContext(withTitle('Developer'), [fact('Cut churn 23%', 0)]);
+    const stored = before.map((f) => ({
+      id: 'f1',
+      contentHash: hashFactContent(f.text),
+      position: f.position,
+    }));
+
+    const after = attachFactContext(withTitle('Senior Developer'), [fact('Cut churn 23%', 0)]);
+    const matched = matchFactIds(stored, after);
+
+    expect(matched[0].id).toBe('f1');
+    expect(matched[0].isNew).toBe(false);
+    // ...and the retitle really did land, so this is not a pass by derivation no-opping.
+    expect(matched[0].title).toBe('Senior Developer');
+    // And the hash itself is text-only: identical text under two different titles hashes the
+    // same, which is what makes the id stable above.
+    expect(hashFactContent(before[0].text)).toBe(hashFactContent(after[0].text));
   });
 });
