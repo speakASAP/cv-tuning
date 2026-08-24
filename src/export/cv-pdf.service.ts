@@ -132,12 +132,21 @@ export class CvPdfService {
       doc.moveDown(0.5);
 
       for (const entry of section.entries) {
-        if (entry.title) {
-          const heading = [entry.title, entry.org].filter(Boolean).join(' — ');
+        // Gated on title OR org, not title alone: a tailored entry (render-markdown.ts) is
+        // identified by employer and period only, because no fact carries a job title.
+        // Gating on the title dropped the employer off the page entirely — silently, which
+        // is the failure class this codebase forbids. Nulls simply contribute nothing; no
+        // value is ever borrowed from another entry to fill one in.
+        const heading = [entry.title, entry.org].filter(Boolean).join(' — ');
+        if (heading) {
           doc.fontSize(11).font('Helvetica-Bold').text(heading, { continued: Boolean(entry.period) });
           if (entry.period) {
             doc.font('Helvetica').fontSize(10).text(`  (${entry.period})`);
           }
+        } else if (entry.period) {
+          // A period with neither title nor org is real information the user's master CV
+          // stated; printing it alone is honest, dropping it is a silent loss.
+          doc.fontSize(10).font('Helvetica').text(`(${entry.period})`);
         }
         for (const bullet of entry.bullets) {
           doc.fontSize(10).font('Helvetica').text(`• ${bullet}`, { indent: 10 });

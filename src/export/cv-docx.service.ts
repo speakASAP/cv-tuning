@@ -87,9 +87,12 @@ export class CvDocxService {
       out.push(new Paragraph({ text: section.heading, heading: HeadingLevel.HEADING_1 }));
 
       for (const entry of section.entries) {
-        if (entry.title) {
-          const heading = [entry.title, entry.org].filter(Boolean).join(' — ');
-          const suffix = entry.period ? ` (${entry.period})` : '';
+        // Gated on title OR org, not title alone — see CvPdfService#write for why. The two
+        // writers share one document model, so this condition must stay identical in both or
+        // PDF and DOCX diverge in content, which cv-document.ts exists to prevent.
+        const heading = [entry.title, entry.org].filter(Boolean).join(' — ');
+        const suffix = entry.period ? ` (${entry.period})` : '';
+        if (heading) {
           out.push(
             new Paragraph({
               children: [
@@ -98,6 +101,8 @@ export class CvDocxService {
               ],
             }),
           );
+        } else if (suffix) {
+          out.push(new Paragraph({ children: [new TextRun({ text: suffix.trim() })] }));
         }
         for (const bullet of entry.bullets) {
           out.push(new Paragraph({ text: bullet, bullet: { level: 0 } }));

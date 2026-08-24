@@ -122,9 +122,14 @@ those characters correctly; real embedded-font Unicode support is deferred (need
 licence decision, and a Docker image change). `info.CreationDate` is pinned to `new Date(0)`
 because pdfkit hashes it into the PDF `/ID` trailer, and spec §6.3 reuses that sha256 for
 artifact idempotency — an unpinned CreationDate would make the hash wall-clock dependent.
-Phase 4 exports a name plus one honest "Tailored Highlights" section, not a full multi-section
-CV with per-entry org/period — that needs facts to carry section/org/period explicitly, or the
-master CV to be parsed structurally at import (top Phase 5 candidate).
+Export is a real multi-section CV: `render-markdown.ts#buildRenderMarkdown` takes the render's
+`FactSnapshot[]` and groups tailored bullets by each source fact's derived `section`, then by its
+`(org, period)` pair. Nulls print as nothing and are NEVER filled from a neighbouring entry, and a
+bullet whose fact has a null section (or whose `sourceFactId` is unresolvable) goes to a trailing
+`Additional Highlights` section rather than being dropped. Ordering is deterministic by contract —
+first appearance in the bullets array, catch-all last — because spec §6.3 reuses the artifact
+sha256 for idempotency. Facts carry no job title, so entries are written title-less as
+`### — Org (Period)`; per-entry titles still need the master CV parsed structurally at import.
 
 **Immutability rule (spec §4.2):** `cv_application.master_version_id` pins an immutable
 master snapshot and never follows `is_current`; `cv_render.facts_snapshot` stores the facts

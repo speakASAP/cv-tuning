@@ -156,10 +156,10 @@ export class ApplicationsService {
 
       const validated = await this.entail.validate(drafted.bullets, snapshot);
 
-      // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export (Task 8)
-      // can parse it — see render-markdown.ts for why this is a name + one honest section
-      // rather than a full multi-section reconstruction.
-      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets);
+      // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export can parse
+      // it. `snapshot` is passed so the builder can group bullets under the section, employer,
+      // and period their source facts were derived from — see render-markdown.ts.
+      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets, snapshot);
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -349,7 +349,7 @@ export class ApplicationsService {
       const validated = await this.entail.validate(drafted.bullets, snapshot);
 
       // Same structured convention as generate() — see render-markdown.ts.
-      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets);
+      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets, snapshot);
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -488,7 +488,10 @@ export class ApplicationsService {
 
     // `source.markdown` already carries the H1 name — it was built by buildRenderMarkdown
     // in generate()/revise() — so it is reused directly rather than re-fetching the master.
-    const markdown = buildRenderMarkdown(source.markdown, bullets);
+    // The section/entry structure is rebuilt from `source.factsSnapshot` (the SAME snapshot the
+    // new render stores below), not carried over from the prior markdown, so re-rendering is
+    // idempotent instead of accumulating a copy of the previous layout.
+    const markdown = buildRenderMarkdown(source.markdown, bullets, source.factsSnapshot);
     const revision = revisionNo + 1;
 
     const draft: CvRenderEntity = {

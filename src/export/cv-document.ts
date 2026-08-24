@@ -48,8 +48,26 @@ export interface CvDocument {
  * `Senior Developer — Acme (2019-2024)` -> its three parts. Split strictly on the em dash:
  * a plain hyphen is common inside titles ("Full-Stack Developer") and company names
  * ("Acme-Corp"), so treating it as a separator too mis-splits those (Phase 4 review).
+ *
+ * Title, org, and period are each independently optional AFTER the em dash, which stays
+ * mandatory as the separator. That admits four further forms, all of which
+ * `render-markdown.ts#buildRenderMarkdown` emits, because a fact carries a derived
+ * `org`/`period` (either of which may be null) but nothing in the fact graph carries a job
+ * title:
+ *   `— Acme (2019-2024)` -> {null, 'Acme', '2019-2024'}
+ *   `— Acme`             -> {null, 'Acme', null}
+ *   `— (2019-2024)`      -> {null, null, '2019-2024'}
+ *   `—`                  -> {null, null, null}  (an entry that resets attribution and no more)
+ * Inventing a title would put a fabrication on the fields an employer judges a CV by; dropping
+ * the org to dodge the missing title would lose real information; and the bare `—` form exists
+ * so a fully unattributed group of bullets cannot silently attach to the entry above it and
+ * inherit somebody else's employer.
+ *
+ * `org` may not begin with `(` so that `— (2019-2024)` reads as a period rather than as an org
+ * literally named "(2019-2024)". An un-dashed heading (`### Acme`) does not match at all and is
+ * still read wholly as a title, so the master-CV shape is untouched.
  */
-const ENTRY_HEADING = /^(?<title>[^—]+?)\s*—\s*(?<org>.+?)\s*(?:\((?<period>[^)]+)\))?$/;
+const ENTRY_HEADING = /^(?<title>[^—]+?)?\s*—\s*(?<org>[^(].*?)?\s*(?:\((?<period>[^)]+)\))?$/;
 
 export function renderToDocument(markdown: string): CvDocument {
   const trimmed = markdown.trim();
@@ -93,7 +111,10 @@ export function renderToDocument(markdown: string): CvDocument {
       const text = line.slice(4).trim();
       const match = ENTRY_HEADING.exec(text);
       section.entries.push({
-        title: match?.groups?.title?.trim() ?? text,
+        // No match at all -> the whole heading is the title (an un-dashed `### Acme`). A match
+        // with an empty title group is the deliberate title-less form and must stay null: a
+        // heading falling back to `text` there would print a stray leading em dash on the CV.
+        title: match ? (match.groups?.title?.trim() || null) : text,
         org: match?.groups?.org?.trim() ?? null,
         period: match?.groups?.period?.trim() ?? null,
         bullets: [],

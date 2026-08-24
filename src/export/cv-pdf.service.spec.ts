@@ -77,3 +77,43 @@ describe('CvPdfService', () => {
     );
   });
 });
+
+describe('CvPdfService: multi-section, title-less entries', () => {
+  // Mirrors the DOCX case: the two writers share one document model, so a multi-section
+  // render with employer-only entry headings must survive both or they have diverged.
+  const MULTI = [
+    '# Jane Doe',
+    '',
+    '## Experience',
+    '### — Acme (2019-2024)',
+    '- Cut checkout latency to 220ms',
+    '### — Globex',
+    '- Ran PostgreSQL in production',
+    '',
+    '## Other Highlights',
+    '- Mentored two juniors',
+  ].join('\n');
+
+  it('puts every section, employer, period, and bullet in the extractable text layer', async () => {
+    const { content } = await new CvPdfService().render(MULTI, 'x');
+    const text = extractPdfText(content);
+    for (const expected of [
+      'EXPERIENCE',
+      'Acme',
+      '2019-2024',
+      'Cut checkout latency to 220ms',
+      'Globex',
+      'Ran PostgreSQL in production',
+      'OTHER HIGHLIGHTS',
+      'Mentored two juniors',
+    ]) {
+      expect(text).toContain(expected);
+    }
+  });
+
+  it('stays byte-stable across renders of a multi-section document (artifact idempotency, spec 6.3)', async () => {
+    const a = await new CvPdfService().render(MULTI, 'x');
+    const b = await new CvPdfService().render(MULTI, 'x');
+    expect(a.sha256).toBe(b.sha256);
+  });
+});

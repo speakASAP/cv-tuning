@@ -79,3 +79,34 @@ describe('renderToDocument', () => {
     expect(entry.period).toBe('2020-2024');
   });
 });
+
+describe('renderToDocument: title-less entry headings', () => {
+  // Tailored renders (render-markdown.ts#buildRenderMarkdown) group bullets by the source
+  // fact's derived {org, period}. A fact carries NO job title — nothing in the fact graph
+  // does — so a tailored entry has an employer and a period but no title. The em dash stays
+  // mandatory (a hyphen is common inside org names), so a title-less entry is written with a
+  // LEADING em dash and must parse back to a null title rather than an org swallowed into it.
+  it('parses "### — Acme (2019-2024)" as a title-less entry, not an org-shaped title', () => {
+    const doc = renderToDocument('# Jane\n\n## Experience\n### — Acme (2019-2024)\n- shipped a thing');
+    const entry = doc.sections[0].entries[0];
+    expect(entry.title).toBeNull();
+    expect(entry.org).toBe('Acme');
+    expect(entry.period).toBe('2019-2024');
+    expect(entry.bullets).toEqual(['shipped a thing']);
+  });
+
+  it('parses a title-less entry with no period at all', () => {
+    // period is null whenever fact-provenance could not confidently derive one; nothing may
+    // be substituted for it, so the heading simply carries no parenthesised group.
+    const doc = renderToDocument('# Jane\n\n## Experience\n### — Acme\n- shipped a thing');
+    const entry = doc.sections[0].entries[0];
+    expect(entry.title).toBeNull();
+    expect(entry.org).toBe('Acme');
+    expect(entry.period).toBeNull();
+  });
+
+  it('still keeps a real title when one is present, so the master-CV shape is unchanged', () => {
+    const doc = renderToDocument('# Jane\n\n## Experience\n### Senior Developer — Acme (2019-2024)\n- x');
+    expect(doc.sections[0].entries[0].title).toBe('Senior Developer');
+  });
+});
