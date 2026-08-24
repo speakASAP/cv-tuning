@@ -7,6 +7,7 @@ import { JobsService } from '../jobs/jobs.service';
 import { CvPdfService } from '../export/cv-pdf.service';
 import { CvDocxService } from '../export/cv-docx.service';
 import { MinioService } from '../storage/minio.service';
+import { BpcpClientService } from '../bpcp/bpcp-client.service';
 import { scoreAiTell } from './ai-tell';
 import {
   ApplicationState,
@@ -26,6 +27,7 @@ import { CvArtifactEntity } from './entities/cv-artifact.entity';
 import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
 import { EntailService } from './entail.service';
+import { assertCanMarkSent, assertCanRecordOutcome } from './outcome';
 import { buildRenderMarkdown } from './render-markdown';
 import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
@@ -74,6 +76,7 @@ export class ApplicationsService {
     private readonly pdf: CvPdfService,
     private readonly docx: CvDocxService,
     private readonly storage: MinioService,
+    private readonly bpcp: BpcpClientService,
   ) {}
 
   /** Creates an application against the current master, pins it, and generates revision 1. */
@@ -775,6 +778,115 @@ export class ApplicationsService {
     const content = await this.storage.getObject(artifact.minioKey);
     await this.applications.update(applicationId, { state: 'downloaded' as ApplicationState });
     return { content, artifact };
+  }
+
+  /**
+   * Spec §5. `marked_sent` is USER-ASSERTED: the app cannot observe a submission on a
+   * third-party portal, so this records a claim, not an observation. It is stored with its own
+   * timestamp and stays visually distinct from the observed states downstream.
+   *
+   * Idempotent by design. The nudge invites the user to answer "did you send it?", and a user
+   * who taps twice must not have their original send date overwritten with today's — that would
+   * silently reset the reply-latency the dashboard reports.
+   */
+  async markSent(
+    userId: string,
+    applicationId: string,
+    sentAt?: Date,
+  ): Promise<CvApplicationEntity> {
+    const application = await this.findOwned(userId, applicationId);
+
+    if (application.state === 'marked_sent') {
+      return application;
+    }
+
+    try {
+      assertCanMarkSent(application.state);
+    } catch (cause) {
+      // A wrong-state transition is the caller's error, not a server fault: 409, with the
+      // reason preserved so the client can tell the user what to do instead.
+      throw new ConflictException(cause instanceof Error ? cause.message : String(cause));
+    }
+
+    const now = new Date();
+    const effectiveSentAt = sentAt ?? now;
+    if (effectiveSentAt.getTime() > now.getTime()) {
+      throw new ConflictException(
+        `sentAt ${effectiveSentAt.toISOString()} is in the future; an application cannot be sent later than now`,
+      );
+    }
+
+    await this.applications.update(applicationId, {
+      state: 'marked_sent' as ApplicationState,
+      sentAt: effectiveSentAt,
+    });
+    application.state = 'marked_sent';
+    application.sentAt = effectiveSentAt;
+
+    // The nudge exists to ask this exact question, so answering it retires the timer. A failure
+    // here must not undo a state change the user already made, but it is logged loudly: a
+    // silently-surviving watch would nag a user who has already replied.
+    await this.retireOutcomeWatch(application, 'sent');
+
+    this.logger.log(`application ${applicationId} marked sent at ${effectiveSentAt.toISOString()}`);
+    return application;
+  }
+
+  /**
+   * Spec §5. The terminal step of the funnel. Gated on `marked_sent` because an outcome is a
+   * reply to a submission: accepting one from `downloaded` would invent the missing send and
+   * make every conversion rate on the dashboard wrong.
+   *
+   * Re-recording is allowed and overwrites. `ghosted` is a provisional verdict by nature — a
+   * reply three weeks later must be recordable, and refusing the correction would freeze the
+   * dataset at its least accurate reading.
+   */
+  async recordOutcome(
+    userId: string,
+    applicationId: string,
+    outcome: string,
+  ): Promise<CvApplicationEntity> {
+    const application = await this.findOwned(userId, applicationId);
+
+    try {
+      assertCanRecordOutcome(application.state, outcome);
+    } catch (cause) {
+      throw new ConflictException(cause instanceof Error ? cause.message : String(cause));
+    }
+
+    const outcomeAt = new Date();
+    await this.applications.update(applicationId, { outcome, outcomeAt });
+    application.outcome = outcome;
+    application.outcomeAt = outcomeAt;
+
+    await this.retireOutcomeWatch(application, 'outcome_recorded');
+
+    this.logger.log(`application ${applicationId} outcome recorded as ${outcome}`);
+    return application;
+  }
+
+  /**
+   * Delivers the signal that ends the BPCP outcome watch. Fail-soft in exactly one direction:
+   * the user's state change has already been persisted and must stand, but the failure is
+   * logged at error level with full context so a stuck instance is visible rather than silent.
+   */
+  private async retireOutcomeWatch(
+    application: CvApplicationEntity,
+    signal: 'sent' | 'outcome_recorded',
+  ): Promise<void> {
+    if (!application.bpcpInstanceId) {
+      return;
+    }
+    try {
+      await this.bpcp.deliverSignal(application.bpcpInstanceId, signal, {
+        applicationId: application.id,
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      this.logger.error(
+        `failed to deliver "${signal}" to BPCP instance ${application.bpcpInstanceId} for application ${application.id}: ${message}`,
+      );
+    }
   }
 
   /**
