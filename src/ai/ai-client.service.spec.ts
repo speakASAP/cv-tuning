@@ -56,6 +56,29 @@ describe('AiClientService', () => {
     expect((await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' })).degraded).toBe(true);
   });
 
+  it('marks degraded when ai-microservice reports model_resolved=false', async () => {
+    // The exact response that blocked the Phase 3 eval baseline on 2026-08-23: the tier
+    // name "smart" arrived in model_used because LiteLLM returned no model id. The
+    // model_resolved flag is what makes that distinguishable from a real model.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ text: 'hello', model_used: 'smart', tier_used: 'smart', model_resolved: false }),
+    });
+
+    expect((await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' })).degraded).toBe(true);
+  });
+
+  it('does not mark degraded when model_resolved=true and the model is expected', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ text: 'hello', model_used: SMART_MODEL, tier_used: 'smart', model_resolved: true }),
+    });
+
+    expect((await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' })).degraded).toBe(false);
+  });
+
   it('marks degraded when the served model is unknown', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hello' }) });
 

@@ -106,6 +106,8 @@ export class AiClientService {
     const payload = (await response.json()) as {
       text?: string;
       model_used?: string;
+      tier_used?: string;
+      model_resolved?: boolean;
       error_code?: string;
       error_message?: string;
     };
@@ -124,9 +126,21 @@ export class AiClientService {
     }
 
     const modelUsed = payload.model_used ?? 'unknown';
-    const degraded = !EXPECTED_MODELS[input.tier].includes(modelUsed);
 
-    if (degraded) {
+    // model_resolved === false means ai-microservice never learned a real model id and
+    // model_used is standing in with the tier name. That is not a served model, so it can
+    // never satisfy the expected-model check — treat it as degraded outright rather than
+    // string-matching a tier against the model list (spec 8.1).
+    const modelResolved = payload.model_resolved !== false;
+    const degraded = !modelResolved || !EXPECTED_MODELS[input.tier].includes(modelUsed);
+
+    if (!modelResolved) {
+      this.logger.error(
+        `ai-microservice reported model_resolved=false for tier ${input.tier} ` +
+          `(model_used=${modelUsed}, tier_used=${payload.tier_used ?? 'absent'}); ` +
+          'the upstream model id is unknown, so the completion is degraded',
+      );
+    } else if (degraded) {
       this.logger.error(
         `tier ${input.tier} was served by ${modelUsed}, not an expected model; marking the result degraded`,
       );

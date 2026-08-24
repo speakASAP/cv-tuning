@@ -79,7 +79,13 @@ export class LinkedinImporter {
       throw new Error('the LinkedIn export contains no positions');
     }
 
-    const sections: string[] = ['# Experience', ''];
+    // The H1 must be the candidate's name and there must be exactly one of them
+    // (`render-markdown.ts#extractH1Name`). Emitting `# Experience` as the first heading
+    // produced a nameless master CV that only failed much later, at generate(), with an
+    // error naming neither LinkedIn nor this importer.
+    const name = this.extractName(find('Profile.csv'));
+
+    const sections: string[] = [`# ${name}`, '', '## Experience', ''];
     for (const row of positions) {
       const title = row['Title'] || 'Role';
       const company = row['Company Name'] || 'Unknown company';
@@ -87,7 +93,7 @@ export class LinkedinImporter {
       const to = row['Finished On'] || 'Present';
       const period = from ? ` (${from} – ${to})` : '';
 
-      sections.push(`## ${title} — ${company}${period}`);
+      sections.push(`### ${title} — ${company}${period}`);
       if (row['Description']) sections.push('', row['Description']);
       sections.push('');
     }
@@ -99,11 +105,39 @@ export class LinkedinImporter {
         .filter((name) => name && name.length > 0);
 
       if (skills.length > 0) {
-        sections.push('# Skills', '', skills.map((skill) => `- ${skill}`).join('\n'), '');
+        sections.push('## Skills', '', skills.map((skill) => `- ${skill}`).join('\n'), '');
       }
     }
 
-    this.logger.log(`converted LinkedIn export: ${positions.length} positions`);
+    this.logger.log(`converted LinkedIn export for ${name}: ${positions.length} positions`);
     return sections.join('\n').trim();
+  }
+
+  /**
+   * Reads the candidate's name from Profile.csv. Raises rather than falling back to a
+   * placeholder: a fabricated name on an exported CV is exactly what the H1-name
+   * convention exists to prevent, and the archive genuinely carries the real one.
+   */
+  private extractName(profileEntry: ZipEntry | undefined): string {
+    if (!profileEntry) {
+      throw new Error(
+        'the archive does not contain Profile.csv, so the CV would have no name. Request the ' +
+          'full "Download your data" export from LinkedIn rather than a partial one.',
+      );
+    }
+
+    const rows = parseCsv(profileEntry.getData().toString('utf8'));
+    const first = rows[0]?.['First Name']?.trim() ?? '';
+    const last = rows[0]?.['Last Name']?.trim() ?? '';
+    const name = [first, last].filter((part) => part.length > 0).join(' ');
+
+    if (name.length === 0) {
+      throw new Error(
+        'Profile.csv carries no First Name or Last Name, so the CV would have no name. ' +
+          'Check the LinkedIn export is complete.',
+      );
+    }
+
+    return name;
   }
 }
