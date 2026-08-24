@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "bpcp.workflow.v1",
+  "workflowId": "cv-application-outcome",
+  "version": 1,
+  "status": "active",
+  "description": "Waits a day after a tailored CV is downloaded; if the user has not asserted they sent it, nudges them so the outcome dataset stays alive (cv-tuning spec 5).",
+  "appliesToProcessRefs": [],
+  "trigger": {
+    "type": "cv-application-downloaded",
+    "sourceService": "cv-tuning",
+    "eventRef": "cv.application.downloaded",
+    "correlationKeys": ["applicationId"]
+  },
+  "actions": [
+    {
+      "actionId": "await-sent",
+      "type": "wait-for-signal",
+      "serviceCapabilityRefs": [],
+      "parameters": {
+        "signalName": "sent",
+        "timeoutMs": 86400000,
+        "onTimeout": "continue"
+      }
+    },
+    {
+      "actionId": "send-outcome-nudge",
+      "type": "call-service-capability",
+      "dependsOn": ["await-sent"],
+      "serviceCapabilityRefs": [],
+      "parameters": {
+        "url": "http://cv-tuning:3379/api/nudges/outcome",
+        "headers": {
+          "x-cv-nudge-secret": "${env:CV_NUDGE_CALLBACK_SECRET}"
+        }
+      }
+    }
+  ],
+  "requiredCapabilities": [],
+  "missingRuntimeFacts": [],
+  "createdAt": "2026-08-24T00:00:00.000Z",
+  "updatedAt": "2026-08-24T00:00:00.000Z"
+}
