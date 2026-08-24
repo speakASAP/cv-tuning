@@ -761,7 +761,7 @@ export class ApplicationsService {
     revisionNo: number,
     kind: ArtifactKind,
   ): Promise<{ content: Buffer; artifact: CvArtifactEntity }> {
-    await this.findOwned(userId, applicationId);
+    const application = await this.findOwned(userId, applicationId);
 
     const render = await this.renders.findOne({ where: { applicationId, revisionNo } });
     if (!render) {
@@ -777,6 +777,26 @@ export class ApplicationsService {
 
     const content = await this.storage.getObject(artifact.minioKey);
     await this.applications.update(applicationId, { state: 'downloaded' as ApplicationState });
+
+    // Spec §5: the nudge fires a day after download. Started here, once — a second download of
+    // the same application must not queue a second nudge.
+    if (!application.bpcpInstanceId) {
+      try {
+        const instanceId = await this.bpcp.startOutcomeWatch(applicationId, userId);
+        if (instanceId) {
+          await this.applications.update(applicationId, { bpcpInstanceId: instanceId });
+        }
+      } catch (cause) {
+        // Fail-soft in one direction only: the user asked for their file and must get it, but a
+        // missing watch means they will never be nudged, so it is logged at error level with
+        // full context rather than swallowed.
+        const message = cause instanceof Error ? cause.message : String(cause);
+        this.logger.error(
+          `failed to start the outcome watch for application ${applicationId} (user ${userId}): ${message}`,
+        );
+      }
+    }
+
     return { content, artifact };
   }
 
