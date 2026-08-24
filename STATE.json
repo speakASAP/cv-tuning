@@ -55,8 +55,8 @@
   },
   "tests": {
     "suites": 45,
-    "cases": 516,
-    "passed": 505,
+    "cases": 518,
+    "passed": 507,
     "skipped": 11,
     "command": "npm test",
     "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
@@ -105,6 +105,7 @@
     "In-cluster service names verified 2026-08-24: the workflow plane is business-process-control-plane:3375 (NOT 'bpcp'), notifications is notifications-microservice:3368. A wrong hostname in k8s/configmap.yaml fails only at runtime, with every test still green.",
     "BPCP's workflow registry is IN-MEMORY and was hardcoded at construction \u2014 there is no create route on its registry controller, so the plan's 'POST the definition to /api/processes' does not exist. cv-tuning's workflow reaches BPCP as the bpcp-workflow-seeds ConfigMap, mounted read-only at BPCP_WORKFLOW_SEED_DIR=/etc/bpcp/workflows and loaded once at boot. Editing docs/workflows/ therefore needs `scripts/publish-workflows.sh` AND a BPCP restart; a commit alone changes nothing in the cluster.",
     "This repo has NO .git/hooks/post-commit, so committing to main does NOT queue a deploy the way the ecosystem CLAUDE.md describes \u2014 every Phase 1-4 deploy must have been manual. Discovered 2026-08-24 when the Phase 5 pod was still 4h old after six commits. Until the hook is installed (../shared/scripts/deploy-queue/install.sh, or copy post-commit-hook.sh), deploy with `../shared/scripts/deploy-queue/enqueue.sh cv-tuning \"<reason>\"`. A silently-undeployed commit looks identical to a deployed one from inside the repo.",
-    "The nudge callback validates context.applicationId as a uuid BEFORE the lookup. cv_application.id is a uuid column, so a malformed id reaches Postgres as a cast error and surfaces as a bare 500 'Internal server error' \u2014 which BPCP then retries three times as a transient failure, because 5xx is classified transient. Found 2026-08-24 by a live smoke test that used a non-uuid correlation key. Never relax the check: 'malformed request' must stay a permanent 4xx so BPCP stops retrying it."
+    "The nudge callback validates context.applicationId as a uuid BEFORE the lookup. cv_application.id is a uuid column, so a malformed id reaches Postgres as a cast error and surfaces as a bare 500 'Internal server error' \u2014 which BPCP then retries three times as a transient failure, because 5xx is classified transient. Found 2026-08-24 by a live smoke test that used a non-uuid correlation key. Never relax the check: 'malformed request' must stay a permanent 4xx so BPCP stops retrying it.",
+    "notifications-microservice requires a Bearer token and its HS256 self-minting path is RETIRED (RS256 only, jwt-verifier.ts TASK-KEY-F3 step 4), so cv-tuning CANNOT mint its own token the way AiClientService does for ai-microservice. It authenticates with a scoped static service token instead: NOTIFICATIONS_SERVICE_TOKEN, stored once at secret/prod/cv-tuning and referenced by BOTH ExternalSecrets, resolved on the far side as the machine actor `service:cv-tuning`. Never point this at SERVICE_TOKEN \u2014 that one grants global:superadmin. Found 2026-08-24 when the first real nudge came back 401."
   ]
 }

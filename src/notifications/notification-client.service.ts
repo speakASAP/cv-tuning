@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 
 export const NOTIFICATIONS_FETCH = 'CV_NOTIFICATIONS_FETCH';
 export const NOTIFICATIONS_SERVICE_URL = 'CV_NOTIFICATIONS_SERVICE_URL';
+export const NOTIFICATIONS_SERVICE_TOKEN = 'CV_NOTIFICATIONS_SERVICE_TOKEN';
 
 const TIMEOUT_MS = 10_000;
 
@@ -19,6 +20,7 @@ export class NotificationClientService {
   constructor(
     @Optional() @Inject(NOTIFICATIONS_FETCH) private readonly fetchImpl: typeof fetch = fetch,
     @Optional() @Inject(NOTIFICATIONS_SERVICE_URL) private readonly baseUrl?: string,
+    @Optional() @Inject(NOTIFICATIONS_SERVICE_TOKEN) private readonly serviceToken?: string,
   ) {}
 
   /**
@@ -34,6 +36,15 @@ export class NotificationClientService {
         `${NOTIFICATIONS_SERVICE_URL} is not set; cannot send the outcome nudge for application ${input.applicationId}`,
       );
     }
+    if (!this.serviceToken) {
+      // notifications-microservice's JwtRolesGuard resolves this token as the scoped machine
+      // actor `service:cv-tuning`. Without it the call comes back a bare 401, which reads as
+      // "cv-tuning is unauthorized" rather than "cv-tuning is misconfigured" — so fail here,
+      // naming the actual cause, instead of spending a request to learn it.
+      throw new Error(
+        `${NOTIFICATIONS_SERVICE_TOKEN} is not set; cannot authenticate the outcome nudge for application ${input.applicationId}`,
+      );
+    }
 
     const subject = input.company
       ? `Any response from ${input.company}?`
@@ -45,7 +56,10 @@ export class NotificationClientService {
     const url = `${this.baseUrl}/notifications/send`;
     const response = await this.fetchImpl(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${this.serviceToken}`,
+      },
       body: JSON.stringify({
         type: 'custom',
         recipient: input.recipient,
