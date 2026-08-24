@@ -43,6 +43,25 @@ export class CvApplicationEntity {
   @Column({ type: 'text', nullable: true })
   outcome!: Outcome | null;
 
+  /**
+   * When the user ASSERTED they submitted (spec §5). Distinct from `updatedAt`, which moves on
+   * every write: the funnel measures reply latency from the send, so it needs the send's own
+   * timestamp. Null until the user marks it sent — never inferred from a download.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  sentAt!: Date | null;
+
+  /** When the outcome was recorded. Null while `outcome` is null; the two are written together. */
+  @Column({ type: 'timestamptz', nullable: true })
+  outcomeAt!: Date | null;
+
+  /**
+   * When the "any response?" nudge was sent (spec §5). Set once and checked before sending, so a
+   * BPCP retry or a duplicate timeout delivery cannot nag the user twice about one application.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  nudgedAt!: Date | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   approvedAt!: Date | null;
 
