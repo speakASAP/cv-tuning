@@ -55,8 +55,8 @@
   },
   "tests": {
     "suites": 32,
-    "cases": 324,
-    "passed": 313,
+    "cases": 339,
+    "passed": 328,
     "skipped": 11,
     "command": "npm test",
     "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
@@ -72,7 +72,9 @@
     "LiteLLM per-model timeout for CV prompts is set and verified (2026-08-24): smart=58s, smart-fallback=10s in litellm_config.yaml litellm_params; free/cheap keep the global 30s so education-service drills are unaffected. Budget nests inside LITELLM_TIMEOUT_MS=75s (58+10+5=73s). Eval re-run after the change: 7/7 fixtures, 0 errors. WATCH: one call still hit 61.1s, above the 58s budget, and succeeded only narrowly. If truncated-JSON errors reappear this is the first thing to check; raising smart further needs either smart-fallback below 10s or a higher LITELLM_TIMEOUT_MS, which education-service 180s pins from above.",
     "Phase 4 export produces a name + ONE honest section (\"Tailored Highlights\"), not a full multi-section CV. Full reconstruction with real per-entry org/period needs a schema change: facts must carry section/org/period explicitly, or the master CV must be parsed structurally at import. Top Phase 5 candidate.",
     "No retry path after an export failure at approve: the application sits `approved` with `stateError` and cannot be re-approved (the state guard rejects non-in_review). Phase 5 candidate.",
-    "Bullet identity is text-string equality only — TailoredBullet has no stable id, so two overreach bullets with identical text in one render are indistinguishable to confirmClaim and the approval gate."
+    "Bullet identity is text-string equality only — TailoredBullet has no stable id, so two overreach bullets with identical text in one render are indistinguishable to confirmClaim and the approval gate.",
+    "LinkedIn Description granularity FIXED 2026-08-24: linkedin.importer.ts#splitDescription emits one markdown list item per claim (author's own bullets/newlines win; otherwise a deterministic sentence split that skips decimals, initials, and abbreviations), so a role no longer extracts as one paragraph-sized fact. Known under-split: a sentence ending in a URL path segment (\"Visit https://a.b/c. Then...\") stays as one claim, because the final token reads as a single-letter initial. Under-splitting keeps a whole claim intact, so it is the safe direction; revisit only if it shows up in real exports.",
+    "The same schema gap underlies BOTH the granularity problem and the missing multi-section export: ExtractedFact/FactSnapshot carry only {kind, text, payload, metric, position} and no section/org/period. Splitting the LinkedIn Description raises fact granularity but the '### Role — Company (period)' heading the importer emits is still NOT carried onto the facts under it, so full per-entry export reconstruction remains blocked on that field."
   ],
   "traps": [
     "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",
@@ -82,6 +84,7 @@
     "No standalone TypeORM data-source: migrations run via migrationsRun at boot. Scratch-DB checks need a direct DataSource script.",
     "pdf-parse's bundled pdf.js throws inside Jest's node environment for ANY PDF (verified with a bare jest config, no ts-jest or Nest involved). Production is unaffected. cv-pdf.service.spec.ts shells out to a child node process to assert extracted text — anyone calling pdf-parse live under Jest will hit this.",
     "pdfkit's built-in Helvetica is WinAnsi-only: CJK, emoji, and Arabic silently corrupt in PDF output. CvPdfService now RAISES on unencodable characters, naming them and pointing at DOCX (which renders them correctly). Real Unicode font support is deferred — needs an embedded TTF, a licence decision, and a Docker image change.",
-    "pdfkit hashes info.CreationDate into the PDF /ID trailer, so an unpinned CreationDate makes the sha256 wall-clock dependent. It is pinned to new Date(0) because spec §6.3 reuses that sha256 for artifact idempotency."
+    "pdfkit hashes info.CreationDate into the PDF /ID trailer, so an unpinned CreationDate makes the sha256 wall-clock dependent. It is pinned to new Date(0) because spec §6.3 reuses that sha256 for artifact idempotency.",
+    "LinkedIn Positions.csv Description routinely contains newlines inside quoted fields. Reading the CSV line-at-a-time shredded such a row into a phantom extra position (`### Role — <prose fragment>`) — a job the candidate never held, invented by the parser. parseCsv now splits records via splitCsvRecords (quote-aware); never reintroduce a body.split(/\\r?\\n/) there."
   ]
 }
