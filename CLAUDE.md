@@ -165,6 +165,56 @@ own contact line(s) (email/phone/links) through into the render, joined with ` |
 separator `cv-document.ts` splits on, which is what makes the `confirmClaim` re-render
 byte-idempotent instead of duplicating or dropping the block.
 
+**Outcome tracking (Phase 5, spec §5)** — `outcome.ts` holds the two transition rules as a pure,
+dependency-free module, because they are the correctness core of the funnel. `marked_sent` follows
+`downloaded` and nothing else: an `approved` application has artifacts but no evidence the user
+ever took them, so accepting a send from there would let the funnel count a submission with no file
+behind it. An outcome is only settable from `marked_sent`, because an outcome is a *reply to a
+submission* — accepting one from `downloaded` would silently invent the missing send step and make
+every conversion rate wrong. `marked_sent` is a **user assertion**, never an observation: the app
+cannot see a submission on a third-party portal. `markSent` is therefore idempotent — the nudge asks
+"did you send it?", and a user who taps twice must not have their original send date overwritten
+with today's. `recordOutcome` deliberately allows correction and overwrite: `ghosted` is provisional
+by nature, and refusing a reply three weeks later would freeze the dataset at its least accurate
+reading. `sentAt`/`outcomeAt`/`nudgedAt` are nullable with no backfill — deriving a send date from
+`updatedAt` would put fabricated timestamps into the very dataset the dashboard reports on.
+
+**bpcp/** — the timer lives in BPCP, not here; cv-tuning gains **no scheduler of its own**, which is
+what Phase 0 built the workflow executor for. `download` starts one outcome-watch instance per
+application (guarded on `bpcpInstanceId` so a repeat download cannot queue a second nudge), and both
+transitions deliver a signal that retires it. Every BPCP call is fail-soft **in one direction only**:
+the user's file and the user's state change already happened and must stand, but the failure is
+logged at error level with full context — a silently missing watch means a user is never nudged and
+nobody finds out. `BpcpClientService` returns `null` for an unset base url and *raises* for a failed
+call: "this deployment has no workflow plane" is a valid configuration, "the call failed" is not, and
+collapsing both into one null would hide the second. BPCP's registry is in-memory with no create
+route, so `docs/workflows/cv-application-outcome.workflow.json` reaches it as a mounted ConfigMap
+(`scripts/publish-workflows.sh`) and is loaded at BPCP's boot — editing it needs a publish *and* a
+BPCP restart. The wait action carries `onTimeout: 'continue'`, never `'fail'`: failing the instance
+would never dispatch the nudge, which is the entire point of the timer.
+
+**notifications/** — `NudgeController` (`POST /api/nudges/outcome`) is the BPCP action callback and
+is deliberately **not** under `CvAuthGuard`: BPCP's dispatcher posts plain JSON with no user
+credential, so a user-token guard would reject every call and the only symptom would be instances
+stuck in BPCP. It is protected by the `x-cv-nudge-secret` shared-secret header, and by the service
+having no ingress before Phase 7. The secret travels as `${env:CV_NUDGE_CALLBACK_SECRET}` in the
+workflow document, resolved by BPCP's dispatcher at send time, so it never lives in a document that
+is stored, listed over an API, and committed. The nudge is **sent before** `nudgedAt` is stamped:
+stamping first would mark delivered a nudge that never left the building and the user would never be
+asked again, whereas a crash between the two can at worst nudge twice. Unlike `BpcpClientService`, an
+unset base url here *raises* — it is only ever reached when a nudge is already due.
+
+**dashboard/** — read-only aggregation, computed **in SQL, never in JS**, so the numbers stay correct
+as a user's history grows instead of loading every row to count it. The funnel is *cumulative*: an
+application in `marked_sent` was necessarily downloaded and approved on the way there, so each stage
+counts everything at or past it — reporting raw per-state counts would show a "downloaded" bar that
+shrinks as users make progress. Every state and outcome key is present with an explicit `0`, because
+a missing key renders as a hole in a UI while `0` is a real answer. `interviewRate` is `null`, never
+`0`, when nothing has been sent: a rate over zero submissions is undefined, and `0%` would tell the
+user their CV is failing when the honest answer is "no data yet". An `offer` counts toward it — an
+offer necessarily passed the interview stage. Reply time is a **median**, not a mean: one application
+answered after six months would drag a mean into fiction.
+
 **Immutability rule (spec §4.2):** `cv_application.master_version_id` pins an immutable
 master snapshot and never follows `is_current`; `cv_render.facts_snapshot` stores the facts
 actually used. Editing the master CV can never retroactively change what the user already
