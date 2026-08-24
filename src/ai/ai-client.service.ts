@@ -108,6 +108,7 @@ export class AiClientService {
       model_used?: string;
       tier_used?: string;
       model_resolved?: boolean;
+      served_by_fallback?: boolean;
       error_code?: string;
       error_message?: string;
     };
@@ -132,13 +133,21 @@ export class AiClientService {
     // never satisfy the expected-model check — treat it as degraded outright rather than
     // string-matching a tier against the model list (spec 8.1).
     const modelResolved = payload.model_resolved !== false;
-    const degraded = !modelResolved || !EXPECTED_MODELS[input.tier].includes(modelUsed);
+    const servedByFallback = payload.served_by_fallback === true;
+    const degraded = !modelResolved || servedByFallback || !EXPECTED_MODELS[input.tier].includes(modelUsed);
 
     if (!modelResolved) {
       this.logger.error(
         `ai-microservice reported model_resolved=false for tier ${input.tier} ` +
           `(model_used=${modelUsed}, tier_used=${payload.tier_used ?? 'absent'}); ` +
           'the upstream model id is unknown, so the completion is degraded',
+      );
+    } else if (servedByFallback) {
+      // LiteLLM echoes the tier alias whether the tier's own model or its fallback served
+      // the call, so this flag is the only way the switch is visible here. A fallback
+      // returns well-formed prose from a different model — a silent quality change.
+      this.logger.error(
+        `tier ${input.tier} was served by a LiteLLM FALLBACK (${modelUsed}); marking the result degraded`,
       );
     } else if (degraded) {
       this.logger.error(

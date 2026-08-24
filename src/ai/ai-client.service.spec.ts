@@ -79,6 +79,42 @@ describe('AiClientService', () => {
     expect((await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' })).degraded).toBe(false);
   });
 
+  it('marks degraded when a LiteLLM fallback served the call', async () => {
+    // LiteLLM echoes the alias "smart" whether smart or smart-fallback answered, so the
+    // served_by_fallback flag is the only signal that the model silently changed.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        text: 'hello',
+        model_used: SMART_FALLBACK,
+        tier_used: 'smart',
+        model_resolved: true,
+        served_by_fallback: true,
+      }),
+    });
+
+    expect((await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' })).degraded).toBe(true);
+  });
+
+  it('accepts a resolved expected model that was not a fallback', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        text: 'hello',
+        model_used: SMART_MODEL,
+        tier_used: 'smart',
+        model_resolved: true,
+        served_by_fallback: false,
+      }),
+    });
+
+    const result = await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' });
+    expect(result.degraded).toBe(false);
+    expect(result.modelUsed).toBe(SMART_MODEL);
+  });
+
   it('marks degraded when the served model is unknown', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hello' }) });
 
