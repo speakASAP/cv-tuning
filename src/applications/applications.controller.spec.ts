@@ -14,6 +14,8 @@ describe('ApplicationsController', () => {
       get: jest.fn(async () => ({ id: 'a1' })),
       listRenders: jest.fn(async () => []),
       diff: jest.fn(async () => ({ revisionNo: 1, baselineRevisionNo: null, hunks: [] })),
+      confirmClaim: jest.fn(async () => ({ render: { id: 'r3' }, needsConfirmation: [] })),
+      retryExport: jest.fn(async () => ({ id: 'a1', state: 'approved', stateError: null })),
     };
     controller = new ApplicationsController(applications);
   });
@@ -64,5 +66,19 @@ describe('ApplicationsController', () => {
     await controller.diff(authed('u2'), 'a1', 2);
 
     expect(applications.diff).toHaveBeenCalledWith('u2', 'a1', 2);
+  });
+
+  it('forwards the bulletId, not a bullet text, to confirmClaim', async () => {
+    // Text was ambiguous between two identical-text bullets; the route must carry the id
+    // through untouched or the second one is undecidable again.
+    await controller.confirmClaim(authed('u2'), 'a1', 3, { bulletId: 'b:f7', decision: 'drop' } as never);
+
+    expect(applications.confirmClaim).toHaveBeenCalledWith('u2', 'a1', 3, 'b:f7', 'drop');
+  });
+
+  it('scopes the export retry to the caller', async () => {
+    await controller.retryExport(authed('u2'), 'a1');
+
+    expect(applications.retryExport).toHaveBeenCalledWith('u2', 'a1');
   });
 });

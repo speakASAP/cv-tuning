@@ -10,6 +10,7 @@ import { MinioService } from '../storage/minio.service';
 import { scoreAiTell } from './ai-tell';
 import {
   ApplicationState,
+  ARTIFACT_KINDS,
   ArtifactKind,
   ChatRole,
   ConfirmedClaim,
@@ -18,6 +19,7 @@ import {
   RenderProvenance,
   TailoredBullet,
 } from './application.types';
+import { bulletIdOf, decidedBulletIds } from './bullet-identity';
 import { diffLines, DiffHunk } from './diff';
 import { CvApplicationEntity } from './entities/cv-application.entity';
 import { CvArtifactEntity } from './entities/cv-artifact.entity';
@@ -419,12 +421,18 @@ export class ApplicationsService {
    * Spec §6 layer 3. Neither decision spends an LLM call — the text is already written and
    * already validated — so neither counts against the revision cap. A user must never be
    * blocked from resolving a claim by a limit that exists to bound model spend.
+   *
+   * The target is addressed by `bulletId`, NOT by its text. Text equality could not name one
+   * of two identical-text bullets in a render: `find` always returned the first, so the second
+   * could never be decided and the approval gate blocked forever on a claim with no way to
+   * resolve it. See `bullet-identity.ts` for why the id is derived from `sourceFactId` and how
+   * renders stored before the field existed still resolve.
    */
   async confirmClaim(
     userId: string,
     applicationId: string,
     revisionNo: number,
-    bulletText: string,
+    bulletId: string,
     decision: 'confirm' | 'drop',
   ): Promise<RenderView> {
     const application = await this.findOwned(userId, applicationId);
@@ -464,10 +472,10 @@ export class ApplicationsService {
       );
     }
 
-    const target = source.provenance.bullets.find((b) => b.text === bulletText);
+    const target = source.provenance.bullets.find((b) => bulletIdOf(b) === bulletId);
     if (!target) {
       // A decision about a bullet that is not in this render is a client bug, not a no-op.
-      throw new NotFoundException(`revision ${revisionNo} has no bullet matching that text`);
+      throw new NotFoundException(`revision ${revisionNo} has no bullet with id "${bulletId}"`);
     }
 
     if (target.verdict !== 'overreach') {
@@ -476,14 +484,25 @@ export class ApplicationsService {
       );
     }
 
+    // Filtered by id, not by text: dropping by text would take the twin down with it — the
+    // same ambiguity that made the second twin undecidable, doing damage in the other
+    // direction by silently deleting a bullet the user never ruled on.
     const bullets =
       decision === 'drop'
-        ? source.provenance.bullets.filter((b) => b.text !== bulletText)
+        ? source.provenance.bullets.filter((b) => bulletIdOf(b) !== bulletId)
         : source.provenance.bullets;
 
     const confirmedOverreach: ConfirmedClaim[] = [
       ...source.confirmedOverreach,
-      { bulletText, decision, decidedBy: userId, decidedAt: new Date().toISOString() },
+      {
+        bulletId,
+        // Kept alongside the id: the audit trail must show a later reader WHAT was accepted,
+        // which an opaque id alone does not.
+        bulletText: target.text,
+        decision,
+        decidedBy: userId,
+        decidedAt: new Date().toISOString(),
+      },
     ];
 
     // `source.markdown` already carries the H1 name — it was built by buildRenderMarkdown
@@ -513,7 +532,10 @@ export class ApplicationsService {
     } as unknown as CvRenderEntity;
 
     const saved = await this.renders.save(draft);
-    this.logger.log(`claim "${bulletText.slice(0, 60)}" ${decision}ed by ${userId} on ${applicationId}`);
+    this.logger.log(
+      `claim ${bulletId} "${target.text.slice(0, 60)}" ${decision === 'drop' ? 'dropped' : 'confirmed'} ` +
+        `by ${userId} on ${applicationId}`,
+    );
     return this.toView(saved);
   }
 
@@ -553,9 +575,13 @@ export class ApplicationsService {
       );
     }
 
-    const decided = new Set(latest.confirmedOverreach.map((c) => c.bulletText));
+    // Matched by bullet id, not by text: two identical-text overreach bullets are two claims
+    // and each needs its own decision. A legacy claim carrying only `bulletText` still clears
+    // its bullet when that text is unambiguous, and deliberately clears NOTHING when it is
+    // not — see bullet-identity.ts#decidedBulletIds.
+    const decided = decidedBulletIds(latest.confirmedOverreach, latest.provenance.bullets);
     const unresolved = latest.provenance.bullets.filter(
-      (b) => b.verdict === 'overreach' && !decided.has(b.text),
+      (b) => b.verdict === 'overreach' && !decided.has(bulletIdOf(b)),
     );
 
     if (unresolved.length > 0) {
@@ -578,11 +604,103 @@ export class ApplicationsService {
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       // The CV IS approved; only the files are missing. Recording the error keeps those two
-      // outcomes distinguishable instead of implying the approval failed.
+      // outcomes distinguishable instead of implying the approval failed — and it is the
+      // marker `retryExport` requires, so the half-finished transition stays completable.
       await this.applications.update(applicationId, { stateError: `export failed: ${message}` });
-      this.logger.error(`export failed for approved application ${applicationId}: ${message}`);
+      this.logger.error(
+        `export failed for approved application ${applicationId}: ${message}; ` +
+          'recoverable via POST :id/retry-export',
+      );
       throw cause;
     }
+
+    // Clearing the marker only once export has actually succeeded is what makes
+    // "approved and exported" and "approved but export failed" distinguishable on the row.
+    await this.applications.update(applicationId, { stateError: null });
+
+    return this.findOwned(userId, applicationId);
+  }
+
+  /**
+   * Completes an approval whose export failed (spec §5.2, §6.3).
+   *
+   * WHY A SEPARATE ENTRY POINT rather than relaxing `approve()`'s state guard. `approve()` is
+   * a TRANSITION into `approved`, and its guard is the thing that makes re-approving a
+   * `downloaded` application — regenerating an artifact the user already holds — structurally
+   * impossible. Adding "…unless stateError is set and no artifacts exist" would turn one
+   * absolute rule into a three-clause condition that every later reader has to re-derive
+   * correctly, and any future caller that forgot one clause would reopen the §6.3 hole.
+   * Reordering so the state advanced only after export succeeded was the other candidate and
+   * was rejected for the opposite reason: it makes an export failure look like an approval
+   * failure, losing the distinction that the CV *was* approved and the files merely are not
+   * there — and it would leave the application in `in_review` with an `approvedAt` question
+   * nobody can answer.
+   *
+   * So this is an idempotent completion of a half-finished transition, never a re-approval,
+   * and it is gated on all three of:
+   *   - `state === 'approved'` — never `downloaded` (the user demonstrably holds a file from
+   *     this render, so nothing may be regenerated for it) and never `in_review` (there is no
+   *     transition in flight to complete);
+   *   - `stateError` set — the marker that an export actually failed. Without it this would be
+   *     a second export of a healthy approval, i.e. a re-approval through a side door;
+   *   - at least one artifact still missing — a complete set means the files exist and may
+   *     already be in the user's hands.
+   *
+   * A retry that fails again re-records the error and re-throws. It never tidies the state.
+   */
+  async retryExport(userId: string, applicationId: string): Promise<CvApplicationEntity> {
+    const application = await this.findOwned(userId, applicationId);
+
+    if (application.state !== 'approved') {
+      throw new ConflictException(
+        `application ${applicationId} is in state ${application.state}; only an approved ` +
+          'application whose export failed can have its export retried',
+      );
+    }
+
+    if (!application.stateError) {
+      throw new ConflictException(
+        `application ${applicationId} has no recorded export failure; there is nothing to retry`,
+      );
+    }
+
+    const latest = await this.renders.findOne({
+      where: { applicationId },
+      order: { revisionNo: 'DESC' },
+    });
+    if (!latest) {
+      // An approved application with no render is data loss, not an empty result.
+      throw new Error(
+        `application ${applicationId} is approved but has no render; its export cannot be retried`,
+      );
+    }
+
+    const existing = await this.artifacts.find({ where: { renderId: latest.id } });
+    const missing = ARTIFACT_KINDS.filter((kind) => !existing.some((a) => a.kind === kind));
+    if (missing.length === 0) {
+      throw new ConflictException(
+        `application ${applicationId} revision ${latest.revisionNo} already has both artifacts; ` +
+          'nothing to retry. Download them instead — regenerating a file the user may already ' +
+          'hold would break the approval guarantee',
+      );
+    }
+
+    this.logger.warn(
+      `retrying export for approved application ${applicationId} revision ${latest.revisionNo}; ` +
+        `missing: ${missing.join(', ')}; previous failure: ${application.stateError}`,
+    );
+
+    try {
+      await this.exportArtifacts(application.userId, applicationId, latest);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      await this.applications.update(applicationId, { stateError: `export failed: ${message}` });
+      this.logger.error(`export retry failed for application ${applicationId}: ${message}`);
+      throw cause;
+    }
+
+    await this.applications.update(applicationId, { stateError: null });
+    this.logger.log(`export retry succeeded for application ${applicationId}`);
 
     return this.findOwned(userId, applicationId);
   }
@@ -602,7 +720,9 @@ export class ApplicationsService {
     const have = new Set(existing.map((a) => a.kind));
     const base = `cv-r${render.revisionNo}`;
 
-    for (const kind of ['pdf', 'docx'] as const) {
+    // Iterated from ARTIFACT_KINDS, the same list `retryExport` computes its missing set from,
+    // so the two can never drift into disagreeing about what a complete export is.
+    for (const kind of ARTIFACT_KINDS) {
       if (have.has(kind)) {
         this.logger.log(`artifact ${kind} already exists for render ${render.id}; not regenerating`);
         continue;
@@ -695,7 +815,13 @@ export class ApplicationsService {
   private toView(render: CvRenderEntity): RenderView {
     return {
       render,
-      needsConfirmation: render.provenance.bullets.filter((b) => b.verdict !== 'supported'),
+      // `bulletId` is projected on rather than read raw: a render stored before the field
+      // existed carries none, and the client cannot post a confirm-or-drop decision without
+      // one. Derived through the same helper the service resolves with, so the id the UI
+      // sends back is guaranteed to match.
+      needsConfirmation: render.provenance.bullets
+        .filter((b) => b.verdict !== 'supported')
+        .map((b) => ({ ...b, bulletId: bulletIdOf(b) })),
     };
   }
 

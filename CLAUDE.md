@@ -111,9 +111,33 @@ completion served by an unexpected model for the same reason `TailorService` doe
 `overreach` verdicts from the entailment validator; `approve` is blocked while any bullet has
 an unresolved `overreach` verdict, and is guarded to only fire from `state === 'in_review'` so
 an already-approved or already-exported application can't be re-approved into an inconsistent
-state. Note: `TailoredBullet` has no stable id (identity is text-string equality), so two
-`overreach` bullets with identical text in one render are indistinguishable to `confirmClaim`
-— tracked in `STATE.json.openItems`.
+state. **That guard is absolute and must stay that way** — an export failure is recovered
+through a separate entry point (`retryExport`, below), never by relaxing it.
+
+Bullets are addressed by `TailoredBullet.bulletId`, not by their text (`bullet-identity.ts`).
+The id is *derived* — `b:<sourceFactId>` — not generated, which is what makes it work in three
+places at once: `sourceFactId` is unique within a render by construction (both `TailorService`
+and `ReviseService` drop a bullet whose source fact was already used), it survives a
+`confirmClaim` re-render and a reword, and it recomputes identically for renders written
+before the field existed, so `provenance`/`confirmedOverreach` jsonb already in the database
+needs no migration. Always read it via `bulletIdOf(bullet)`, never as `bullet.bulletId` — a
+raw read sees `undefined` on every stored render. A legacy `ConfirmedClaim` carrying only
+`bulletText` still clears its claim when that text is unambiguous, and deliberately clears
+nothing when two bullets share it: making the user re-decide is safe, silently clearing the
+wrong twin is not. The id never reaches `buildRenderMarkdown` or either export writer, so the
+spec §6.3 artifact sha256 is unaffected (pinned by `bullet-id-artifact-stability.spec.ts`).
+
+**Export-failure recovery** — `approve` advances the state, then exports; a failing export
+records `stateError: 'export failed: …'` and rethrows, and `approve` clears `stateError` only
+once export has actually succeeded, so "approved and exported" and "approved but export
+failed" stay distinguishable on the row. `POST :id/retry-export` → `retryExport` completes
+that half-finished transition. It is an idempotent completion, never a re-approval, and is
+gated on all three of: `state === 'approved'` (never `downloaded` — the user demonstrably
+holds a file from that render), `stateError` set (without it there is nothing to retry, and a
+second export of a healthy approval is a re-approval through a side door), and at least one
+`ARTIFACT_KINDS` entry still missing (a complete set means the files may already be in the
+user's hands). A retry that fails again re-records the error and rethrows; it never tidies the
+state.
 
 **export/ (Phase 4)** — one model, two writers, spec §6.3. `cv-document.ts` defines a single
 document model that `cv-pdf.service.ts` and `cv-docx.service.ts` both render from, so PDF and

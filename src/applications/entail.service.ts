@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiClientService } from '../ai/ai-client.service';
 import { EntailmentVerdict, FactSnapshot, TailoredBullet } from './application.types';
+import { bulletIdOf } from './bullet-identity';
 import {
   buildEntailPrompt,
   ENTAIL_OUTPUT_SCHEMA,
@@ -86,11 +87,18 @@ export class EntailService {
     };
   }
 
+  /**
+   * The single point where a `DraftBullet` becomes a persisted `TailoredBullet`, and therefore
+   * the only place `bulletId` needs stamping — `TailorService` and `ReviseService` both feed
+   * this method, and `confirmClaim` re-renders from already-stamped bullets.
+   */
   private toValidated(bullet: DraftBullet, raw: RawResult | undefined): TailoredBullet {
+    const bulletId = bulletIdOf(bullet);
+
     if (!raw) {
       // Fail closed: an unvalidated claim must never be presented as validated.
       this.logger.error(`validator skipped bullet "${bullet.text}"; treating it as unsupported`);
-      return { ...bullet, verdict: 'unsupported', span: bullet.text };
+      return { ...bullet, bulletId, verdict: 'unsupported', span: bullet.text };
     }
 
     const verdict: EntailmentVerdict =
@@ -105,14 +113,14 @@ export class EntailService {
     }
 
     if (verdict === 'supported') {
-      return { ...bullet, verdict, span: null };
+      return { ...bullet, bulletId, verdict, span: null };
     }
 
     // A downgrade must never destroy the reason for it: synthesize a span when the model
     // gave none, so the review UI can still show the user what to confirm or drop.
     const span = typeof raw.span === 'string' && raw.span.trim() ? raw.span.trim() : bullet.text;
 
-    return { ...bullet, verdict, span };
+    return { ...bullet, bulletId, verdict, span };
   }
 
   private parseResults(text: string): RawResult[] {

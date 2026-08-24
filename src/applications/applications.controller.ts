@@ -83,12 +83,21 @@ export class ApplicationsController {
     @Param('revisionNo', ParseIntPipe) revisionNo: number,
     @Body() body: ConfirmClaimDto,
   ) {
-    return this.applications.confirmClaim(req.user.id, id, revisionNo, body.bulletText, body.decision);
+    return this.applications.confirmClaim(req.user.id, id, revisionNo, body.bulletId, body.decision);
   }
 
   @Post(':id/approve')
   async approve(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.approve(req.user.id, id);
+  }
+
+  /**
+   * Completes an approval whose export failed. Deliberately NOT folded into `approve` — see
+   * `ApplicationsService.retryExport` for why the approval guard stays absolute.
+   */
+  @Post(':id/retry-export')
+  async retryExport(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.applications.retryExport(req.user.id, id);
   }
 
   @Get(':id/renders/:revisionNo/download/:kind')

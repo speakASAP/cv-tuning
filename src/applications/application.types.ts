@@ -25,6 +25,20 @@ export type EntailmentVerdict = (typeof ENTAILMENT_VERDICTS)[number];
  * one supports.
  */
 export interface TailoredBullet {
+  /**
+   * Stable identity within its render, so a confirm-or-drop decision addresses one specific
+   * bullet rather than "whatever bullet happens to carry this text".
+   *
+   * Optional in the TYPE, never absent in practice: `provenance` is persisted `jsonb`, so
+   * renders written before this field existed do not carry it. `bullet-identity.ts#bulletIdOf`
+   * derives exactly the same value from `sourceFactId` for those rows, which is what keeps an
+   * old render decidable without a data migration. Always read it through that helper, never
+   * directly — a raw read would see `undefined` on every stored render.
+   *
+   * Never emitted into `cv_render.markdown` or into either export writer, so the artifact
+   * sha256 spec §6.3 reuses for idempotency is unaffected by it.
+   */
+  bulletId?: string;
   text: string;
   /** The single master fact this bullet rewrites. Validated against the snapshot, never trusted. */
   sourceFactId: string;
@@ -77,6 +91,21 @@ export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
  * that a decision happened.
  */
 export interface ConfirmedClaim {
+  /**
+   * The `TailoredBullet.bulletId` this decision was made about — the field the approval gate
+   * actually matches on.
+   *
+   * Optional for the same reason as `TailoredBullet.bulletId`: `confirmedOverreach` is
+   * persisted `jsonb` and rows written before this existed carry only `bulletText`. Those are
+   * resolved back by text, but only when the text is unambiguous within the render — see
+   * `bullet-identity.ts#decidedBulletIds`.
+   */
+  bulletId?: string;
+  /**
+   * The bullet's text as it read when the decision was made. Retained even now that
+   * `bulletId` carries identity: this is the audit trail proving a person accepted a specific
+   * CLAIM, and an opaque id alone would not show a later reader what was accepted.
+   */
   bulletText: string;
   decision: 'confirm' | 'drop';
   decidedBy: string;

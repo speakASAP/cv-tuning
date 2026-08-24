@@ -1,7 +1,20 @@
 import { ApplicationsService } from './applications.service';
+import { bulletIdOf } from './bullet-identity';
 
+/**
+ * Each bullet gets its OWN sourceFactId, matching what the pipeline actually produces:
+ * TailorService and ReviseService both drop a bullet whose source fact was already used, so
+ * two bullets in a saved render can never share one. `bullet-identity.ts` derives a bullet's
+ * id from that field, so a helper that reused one id across a render would be testing a shape
+ * the service refuses to create.
+ */
+let factSeq = 0;
 const bullet = (text: string, verdict: string) => ({
-  text, sourceFactId: 'f1', targetRequirement: null, verdict, span: verdict === 'supported' ? null : text,
+  text,
+  sourceFactId: `f${++factSeq}`,
+  targetRequirement: null,
+  verdict,
+  span: verdict === 'supported' ? null : text,
 });
 
 function makeService(render: Record<string, unknown>, state = 'in_review') {
@@ -61,10 +74,11 @@ describe('approval gate', () => {
   });
 
   it('allows approval once every overreach bullet is confirmed', async () => {
+    const led = bullet('Led a team of 12', 'overreach');
     const { service, applications } = makeService(
       renderWith(
-        [bullet('Led a team of 12', 'overreach')],
-        [{ bulletText: 'Led a team of 12', decision: 'confirm', decidedBy: 'u1', decidedAt: 'now' }],
+        [led],
+        [{ bulletId: bulletIdOf(led), bulletText: led.text, decision: 'confirm', decidedBy: 'u1', decidedAt: 'now' }],
       ),
     );
     await service.approve('u1', 'app-1');
@@ -87,26 +101,27 @@ describe('approval gate', () => {
   });
 
   it('records who confirmed a claim and when', async () => {
-    const { service, renders } = makeService(renderWith([bullet('Led a team of 12', 'overreach')]));
-    await service.confirmClaim('u1', 'app-1', 1, 'Led a team of 12', 'confirm');
+    const led = bullet('Led a team of 12', 'overreach');
+    const { service, renders } = makeService(renderWith([led]));
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(led), 'confirm');
     const saved = renders.save.mock.calls[0][0];
     expect(saved.confirmedOverreach[0]).toMatchObject({ bulletText: 'Led a team of 12', decidedBy: 'u1' });
     expect(saved.confirmedOverreach[0].decidedAt).toEqual(expect.any(String));
   });
 
   it('a dropped claim removes the bullet and does not count as confirmed', async () => {
-    const { service, renders } = makeService(
-      renderWith([bullet('Led a team of 12', 'overreach'), bullet('Ran Postgres', 'supported')]),
-    );
-    await service.confirmClaim('u1', 'app-1', 1, 'Led a team of 12', 'drop');
+    const led = bullet('Led a team of 12', 'overreach');
+    const { service, renders } = makeService(renderWith([led, bullet('Ran Postgres', 'supported')]));
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(led), 'drop');
     const saved = renders.save.mock.calls[0][0];
     expect(saved.provenance.bullets).toHaveLength(1);
     expect(saved.markdown).not.toContain('Led a team of 12');
   });
 
   it('a confirm/drop render is attributed to the user, not the AI', async () => {
-    const { service, renders } = makeService(renderWith([bullet('Led a team of 12', 'overreach')]));
-    await service.confirmClaim('u1', 'app-1', 1, 'Led a team of 12', 'confirm');
+    const led = bullet('Led a team of 12', 'overreach');
+    const { service, renders } = makeService(renderWith([led]));
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(led), 'confirm');
     expect(renders.save.mock.calls[0][0].createdBy).toBe('user');
   });
 });

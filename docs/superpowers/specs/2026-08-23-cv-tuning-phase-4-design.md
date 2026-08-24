@@ -114,7 +114,12 @@ content by definition. The cap and the rate limit are what bound spend here.
 ### 5.1 Confirm-on-new-claim
 
 `POST /api/applications/:id/renders/:revisionNo/confirm-claim` — body
-`{ bulletText: string, decision: 'confirm'|'drop' }`.
+`{ bulletId: string, decision: 'confirm'|'drop' }`.
+
+`bulletId` (added 2026-08-24), not `bulletText`: two `overreach` bullets with identical text
+in one render were indistinguishable under text equality, so the second could never be decided
+and the approval gate blocked on it forever. The id is `TailoredBullet.bulletId`, returned on
+every bullet in `needsConfirmation` — see `src/applications/bullet-identity.ts`.
 
 This is parent §6 layer 3 made real. `confirm` appends to `confirmed_overreach` with a
 timestamp; `drop` removes the bullet. Either decision produces a new render, so the diff chain

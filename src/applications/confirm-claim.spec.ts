@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
+import { bulletIdOf } from './bullet-identity';
 
 interface RenderRow {
   id: string;
@@ -7,8 +8,8 @@ interface RenderRow {
   revisionNo: number;
   markdown: string;
   factsSnapshot: unknown[];
-  provenance: { bullets: { text: string; sourceFactId: string; targetRequirement: null; verdict: string; span: string | null }[]; droppedBullets: unknown[] };
-  confirmedOverreach: { bulletText: string; decision: string; decidedBy: string; decidedAt: string }[];
+  provenance: { bullets: { text: string; sourceFactId: string; targetRequirement: null; verdict: string; span: string | null; bulletId?: string }[]; droppedBullets: unknown[] };
+  confirmedOverreach: { bulletId?: string; bulletText: string; decision: string; decidedBy: string; decidedAt: string }[];
   createdBy: string;
   modelUsed: string;
   validatorModelUsed: string;
@@ -99,12 +100,12 @@ describe('ApplicationsService.confirmClaim', () => {
     const { service, rows } = makeService();
 
     // Both submitted against revision 1 — exactly what the UI showed before either decision.
-    const afterA = await service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'confirm');
+    const afterA = await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
     expect(afterA.render.revisionNo).toBe(2);
 
     // The client re-submits the second decision against the revision it now has (2), not the
     // stale value (1) — this is the corrected, expected caller behaviour.
-    const afterB = await service.confirmClaim('u1', 'app-1', 2, OVERREACH_B.text, 'confirm');
+    const afterB = await service.confirmClaim('u1', 'app-1', 2, bulletIdOf(OVERREACH_B), 'confirm');
     expect(afterB.render.revisionNo).toBe(3);
 
     // Both confirmations must be present in the final audit trail.
@@ -117,10 +118,10 @@ describe('ApplicationsService.confirmClaim', () => {
   it('rejects a confirm-claim call against a revision that is no longer the latest, naming the real latest', async () => {
     const { service } = makeService();
 
-    await service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'confirm');
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
 
     // Second call still targets revision 1, exactly the stale-UI scenario from the review.
-    await expect(service.confirmClaim('u1', 'app-1', 1, OVERREACH_B.text, 'confirm')).rejects.toThrow(
+    await expect(service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_B), 'confirm')).rejects.toThrow(
       /no longer the latest.*latest is 2/is,
     );
   });
@@ -128,8 +129,8 @@ describe('ApplicationsService.confirmClaim', () => {
   it('never surfaces a raw unique-constraint collision for two decisions against stale state', async () => {
     const { service, renders } = makeService();
 
-    await service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'confirm');
-    const rejection = service.confirmClaim('u1', 'app-1', 1, OVERREACH_B.text, 'confirm');
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
+    const rejection = service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_B), 'confirm');
 
     await expect(rejection).rejects.toBeInstanceOf(ConflictException);
     await expect(rejection).rejects.not.toThrow(/duplicate key|unique constraint/i);
@@ -141,7 +142,7 @@ describe('ApplicationsService.confirmClaim', () => {
   it('rejects confirming a claim once the application has left in_review (e.g. approved)', async () => {
     const { service } = makeService({ state: 'approved' });
 
-    await expect(service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'confirm')).rejects.toThrow(
+    await expect(service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm')).rejects.toThrow(
       /approved/,
     );
   });
@@ -149,7 +150,7 @@ describe('ApplicationsService.confirmClaim', () => {
   it('404s a confirm-claim call for a revision that does not exist', async () => {
     const { service } = makeService();
 
-    await expect(service.confirmClaim('u1', 'app-1', 99, OVERREACH_A.text, 'confirm')).rejects.toBeInstanceOf(
+    await expect(service.confirmClaim('u1', 'app-1', 99, bulletIdOf(OVERREACH_A), 'confirm')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -157,7 +158,7 @@ describe('ApplicationsService.confirmClaim', () => {
   it('carries confirmedOverreach forward on the new render rather than dropping it', async () => {
     const { service } = makeService();
 
-    const result = await service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'confirm');
+    const result = await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
 
     expect(result.render.confirmedOverreach).toHaveLength(1);
     expect(result.render.confirmedOverreach[0]).toMatchObject({
@@ -170,7 +171,7 @@ describe('ApplicationsService.confirmClaim', () => {
   it('drops the bullet from the new render when the decision is drop', async () => {
     const { service } = makeService();
 
-    const result = await service.confirmClaim('u1', 'app-1', 1, OVERREACH_A.text, 'drop');
+    const result = await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'drop');
 
     const texts = result.render.provenance.bullets.map((b) => b.text);
     expect(texts).not.toContain(OVERREACH_A.text);
