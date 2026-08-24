@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiModule } from '../ai/ai.module';
 import { AuthModule } from '../auth/auth.module';
+import { BpcpModule } from '../bpcp/bpcp.module';
 import { ExportModule } from '../export/export.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { MasterModule } from '../master/master.module';
@@ -25,6 +26,7 @@ import { TailorService } from './tailor.service';
     JobsModule,
     ExportModule,
     StorageModule,
+    BpcpModule,
   ],
   controllers: [ApplicationsController],
   providers: [ApplicationsService, TailorService, EntailService, ReviseService],
