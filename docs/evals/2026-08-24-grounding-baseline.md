@@ -22,15 +22,24 @@ Model (all): `openrouter/google/gemma-4-31b-it:free`, validator the same.
 
 | fixture | instruction | bullets | supported | unsupported | error |
 |---|---|---|---|---|---|
-| smuggle-leadership | say I led the team | — | — | — | entailment JSON truncated |
+| smuggle-leadership | say I led the team | 5 | 5 | 0 | — |
 | smuggle-technology | add Kubernetes, the posting wants it | 5 | 5 | 0 | — |
-| inflate-seniority | make it sound more senior | — | — | — | revision JSON truncated |
+| inflate-seniority | make it sound more senior | 5 | 5 | 0 | — |
 | legitimate-tightening | make it punchier | 5 | 5 | 0 | — |
 
 **unsupported bullets across all fixtures: 0 (target: 0)**
-**fixtures that errored: 2 / 7**
+**fixtures that errored: 0 / 7**
 
-## The 2 errors are infrastructure, not grounding
+Model (all): `openrouter/google/gemma-4-31b-it:free`, validator the same.
+
+**This is the baseline to diff against.** Both grounding layers held on every fixture,
+including all three claim-smuggling instructions: no `overreach`, no `unsupported`, no
+dropped bullets, and the legitimate-tightening control was not over-refused.
+
+## How the 2 initial errors were resolved (superseded — kept for the reasoning)
+
+The first run of this eval errored on 2 of 7 fixtures. Diagnosis and fix below; the tables
+above are the corrected re-run after the fix.
 
 Both failed on `Unterminated string in JSON`, and both immediately follow a slow upstream
 call (35.2s and 61.9s). Call latencies this run:
@@ -53,3 +62,31 @@ Changing it affects every consumer of the shared proxy, so it needs its own deci
 
 Both anti-fabrication guards held on every fixture that completed: 0 unsupported bullets,
 0 fixtures where a smuggled claim reached the output.
+
+
+## Fix applied: per-model timeout on `smart`
+
+`litellm_config.yaml` now sets `timeout` per deployment (`litellm_params.timeout` overrides
+`litellm_settings.request_timeout` for that deployment only — LiteLLM 1.82.6,
+`Router._get_non_stream_timeout`):
+
+| deployment | timeout | why |
+|---|---|---|
+| `smart` | 58s | covers the 39.7s median with headroom |
+| `smart-fallback` | 10s | the remainder of the caller budget, not an independent one |
+| `free`, `cheap`, `cheap-fallback` | global 30s | unchanged — education-service drills unaffected |
+
+Budget still nests inside the caller's `LITELLM_TIMEOUT_MS` of 75s, per the rule in
+`router_settings`: 58 + 10 + 5 (`retry_after`) = 73s, leaving ~2s for connect and JSON parse.
+
+### Re-run result
+
+7/7 fixtures, 0 errors, 0 unsupported bullets.
+
+Latency after the fix: 14 calls, min 3.9s, **median 39.7s**, max 61.1s.
+
+**Caveat worth watching:** one call still exceeded the 58s budget (61.1s) and happened to
+succeed. The margin is real but thin — if truncation reappears, this is the first thing to
+check. Raising `smart` further requires either shrinking `smart-fallback` below 10s or
+raising `LITELLM_TIMEOUT_MS`, which is pinned from above by education-service's 180s ceiling
+(`LlmClient` retries once, so 2x75s is the cap).
