@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiClientService } from '../ai/ai-client.service';
-import { ExtractedFact } from './fact-identity';
+import { ContextualFact, ExtractedFact } from './fact-identity';
+import { attachFactContext } from './fact-provenance';
 import { FACT_KINDS, isFactKind } from './master.types';
 
 const FENCE = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/;
@@ -47,7 +48,15 @@ export class FactExtractorService {
 
   constructor(private readonly ai: AiClientService) {}
 
-  async extract(markdown: string): Promise<ExtractedFact[]> {
+  /**
+   * Returns facts carrying derived `{section, org, period}`.
+   *
+   * The model extracts facts ONLY. The heading context is walked out of the markdown in
+   * code afterwards (`fact-provenance.ts`) so the employer and the date range — the fields
+   * an employer judges a CV by — can never be reported by a model, which would contradict
+   * both this prompt's own "never infer, embellish" instruction and spec §6.
+   */
+  async extract(markdown: string): Promise<ContextualFact[]> {
     if (markdown.trim().length === 0) {
       throw new Error('cannot extract facts from empty markdown');
     }
@@ -74,7 +83,9 @@ export class FactExtractorService {
       throw new Error('model response has no facts array');
     }
 
-    return rawFacts.map((raw, index) => this.toFact(raw as RawFact, index));
+    const facts = rawFacts.map((raw, index) => this.toFact(raw as RawFact, index));
+
+    return attachFactContext(markdown, facts);
   }
 
   private parse(text: string): unknown {

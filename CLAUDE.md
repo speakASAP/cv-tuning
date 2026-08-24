@@ -62,6 +62,18 @@ their IDs and existing provenance stays valid. A mismatch between the stored
 `facts_extracted_from_markdown_sha` and the current Markdown **raises** — it never degrades
 quietly. Importers (`gdocs`, `linkedin`, `document`) all normalize into the same Markdown.
 
+Each fact also carries `{section, org, period}` — **derived deterministically in code** by
+walking the Markdown headings (`fact-provenance.ts`), never reported by the extraction model.
+An LLM naming the employer or the date range would put a fabrication surface on exactly the
+fields an employer judges a CV by (spec §6), so they must never enter
+`fact-extractor.service.ts`'s `OUTPUT_SCHEMA` or system prompt. Mapping a returned fact back
+to its heading block is normalised-text matching (exact, then containment with a length
+floor); a fact that matches nothing, or matches blocks that disagree, gets `null` for that
+field rather than a nearest-heading guess, and unmapped facts are logged at warn but never
+throw — a heading-less CV is a valid input. The derived fields are deliberately **outside**
+`hashFactContent`: including them would make re-titling a job heading orphan every fact under
+it and break every provenance link a tailored CV already holds.
+
 **jobs/** — job-description ingest. `job-fetcher.service.ts` is SSRF-guarded: it re-checks
 the resolved address at every phase, including after redirects, because a posting URL is
 attacker-supplied and could otherwise reach the Kubernetes API. A blocked or thin fetch is a

@@ -677,7 +677,15 @@ export class ApplicationsService {
   }
 
   private toSnapshot(facts: CvFactEntity[]): FactSnapshot[] {
-    return facts.map((fact) => ({ factId: fact.factId, text: fact.text, kind: fact.kind }));
+    return facts.map((fact) => ({
+      factId: fact.factId,
+      text: fact.text,
+      kind: fact.kind,
+      // Carried through so a render stays reproducible after the master headings change.
+      section: fact.section,
+      org: fact.org,
+      period: fact.period,
+    }));
   }
 
   private toView(render: CvRenderEntity): RenderView {

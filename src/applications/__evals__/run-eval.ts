@@ -49,12 +49,22 @@ interface Fixture {
   company: string;
 }
 
+// No heading context: these fixtures are hand-written facts with no source markdown to
+// derive it from. Nulls keep the fixture text — and therefore the recorded baseline —
+// byte-identical to `docs/evals/2026-08-24-grounding-baseline.md`.
+const NO_CONTEXT = { section: null, org: null, period: null };
+
 const BASE_FACTS: FactSnapshot[] = [
-  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role' },
-  { factId: 'f2', text: 'Ran PostgreSQL in production for an order system', kind: 'achievement' },
-  { factId: 'f3', text: 'Cut checkout latency from 900ms to 220ms by replacing an N+1 query', kind: 'achievement' },
-  { factId: 'f4', text: 'Wrote the internal TypeScript style guide', kind: 'achievement' },
-  { factId: 'f5', text: 'BSc Computer Science, Charles University', kind: 'education' },
+  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role', ...NO_CONTEXT },
+  { factId: 'f2', text: 'Ran PostgreSQL in production for an order system', kind: 'achievement', ...NO_CONTEXT },
+  {
+    factId: 'f3',
+    text: 'Cut checkout latency from 900ms to 220ms by replacing an N+1 query',
+    kind: 'achievement',
+    ...NO_CONTEXT,
+  },
+  { factId: 'f4', text: 'Wrote the internal TypeScript style guide', kind: 'achievement', ...NO_CONTEXT },
+  { factId: 'f5', text: 'BSc Computer Science, Charles University', kind: 'education', ...NO_CONTEXT },
 ];
 
 const FIXTURES: Fixture[] = [

@@ -1,4 +1,4 @@
-import { ExtractedFact, StoredFact, hashFactContent, matchFactIds } from './fact-identity';
+import { ContextualFact, StoredFact, hashFactContent, matchFactIds } from './fact-identity';
 
 const stored = (id: string, text: string, position: number): StoredFact => ({
   id,
@@ -6,12 +6,15 @@ const stored = (id: string, text: string, position: number): StoredFact => ({
   position,
 });
 
-const extracted = (text: string, position: number): ExtractedFact => ({
+const extracted = (text: string, position: number): ContextualFact => ({
   text,
   position,
   kind: 'achievement',
   payload: {},
   metric: null,
+  section: null,
+  org: null,
+  period: null,
 });
 
 describe('hashFactContent', () => {
@@ -29,6 +32,47 @@ describe('hashFactContent', () => {
 
   it('distinguishes genuinely different content', () => {
     expect(hashFactContent('Cut churn 23%')).not.toBe(hashFactContent('Cut churn 31%'));
+  });
+});
+
+describe('derived context is outside fact identity', () => {
+  it('keeps a fact id when only its org and period changed', () => {
+    // section/org/period are DERIVED from the headings above a fact. If they entered the
+    // content hash, re-titling a job heading would orphan every fact under it and break
+    // every provenance link a tailored CV already holds.
+    const before: ContextualFact = {
+      ...extracted('Cut churn 23%', 0),
+      section: 'Experience',
+      org: 'Acme Corp',
+      period: '2019 - 2024',
+    };
+    const after: ContextualFact = {
+      ...extracted('Cut churn 23%', 0),
+      section: 'Work History',
+      org: 'Acme Corporation GmbH',
+      period: '2019 - 2025',
+    };
+
+    const stored = [{ id: 'f1', contentHash: hashFactContent(before.text), position: 0 }];
+    const matched = matchFactIds(stored, [after]);
+
+    expect(matched[0].id).toBe('f1');
+    expect(matched[0].isNew).toBe(false);
+  });
+
+  it('carries the derived context through onto the matched fact', () => {
+    const fact: ContextualFact = {
+      ...extracted('Cut churn 23%', 0),
+      section: 'Experience',
+      org: 'Acme Corp',
+      period: '2019 - 2024',
+    };
+
+    const [matched] = matchFactIds([], [fact]);
+
+    expect(matched.org).toBe('Acme Corp');
+    expect(matched.period).toBe('2019 - 2024');
+    expect(matched.section).toBe('Experience');
   });
 });
 

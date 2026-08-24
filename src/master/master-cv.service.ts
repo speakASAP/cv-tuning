@@ -120,6 +120,10 @@ export class MasterCvService {
             text: f.text,
             payload: f.payload,
             metric: f.metric,
+            // Derived from the markdown headings, not from the model (spec §4.1/§6).
+            section: f.section,
+            org: f.org,
+            period: f.period,
             contentHash: f.contentHash,
             position: f.position,
           })) as never,

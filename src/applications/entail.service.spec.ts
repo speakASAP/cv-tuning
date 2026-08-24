@@ -1,3 +1,4 @@
+import { FactSnapshot } from './application.types';
 import { EntailService } from './entail.service';
 
 const SMART_MODEL = 'openrouter/google/gemma-4-31b-it:free';
@@ -10,9 +11,9 @@ const aiReturning = (payload: unknown, degraded = false) => ({
   })),
 });
 
-const facts = [
-  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role' },
-  { factId: 'f2', text: 'Ran PostgreSQL in production', kind: 'achievement' },
+const facts: FactSnapshot[] = [
+  { factId: 'f1', text: 'Senior Developer at Acme, 2019-2024', kind: 'role', section: 'Experience', org: 'Acme Corp', period: '2019-2024' },
+  { factId: 'f2', text: 'Ran PostgreSQL in production', kind: 'achievement', section: 'Experience', org: 'Acme Corp', period: '2019-2024' },
 ];
 
 const bullet = (text: string, sourceFactId = 'f1') => ({

@@ -7,6 +7,24 @@ export interface StoredFact {
   position: number;
 }
 
+/**
+ * Where a fact sits in the master CV's heading structure, DERIVED IN CODE by walking the
+ * markdown headings (`fact-provenance.ts`) — never reported by the extraction model.
+ *
+ * Letting the model name the employer or the date range would create a fabrication surface
+ * on exactly the fields an employer judges a CV by, which is what spec §6 exists to
+ * prevent. Every field is null when the fact could not be confidently mapped: a wrong
+ * employer on a CV is worse than an absent one.
+ */
+export interface FactContext {
+  /** The H2 the fact sits under, e.g. "Experience". */
+  section: string | null;
+  /** The employer/institution from a `### Role — Company (period)` entry heading. */
+  org: string | null;
+  /** The parenthesised date range from that entry heading, verbatim. */
+  period: string | null;
+}
+
 export interface ExtractedFact {
   kind: FactKind;
   text: string;
@@ -15,7 +33,10 @@ export interface ExtractedFact {
   position: number;
 }
 
-export type MatchedFact = ExtractedFact & {
+/** An extracted fact carrying its derived heading context. What the master CV persists. */
+export type ContextualFact = ExtractedFact & FactContext;
+
+export type MatchedFact = ContextualFact & {
   id: string;
   contentHash: string;
   isNew: boolean;
@@ -24,6 +45,10 @@ export type MatchedFact = ExtractedFact & {
 /**
  * Identity of a fact is its normalised text. Whitespace and casing changes are not
  * edits, so they must not orphan a fact and break every provenance link pointing at it.
+ *
+ * DERIVED CONTEXT IS DELIBERATELY EXCLUDED. If `section`/`org`/`period` entered this hash,
+ * re-titling a job heading would orphan every fact under it and break every provenance link
+ * a tailored CV already holds. Pinned by `fact-provenance.spec.ts`.
  */
 export function hashFactContent(text: string): string {
   const normalised = text.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -38,7 +63,7 @@ export function hashFactContent(text: string): string {
  * Where several stored facts share a hash, the one nearest the extracted fact's position
  * wins, which keeps ids stable when a duplicated line is edited in one place only.
  */
-export function matchFactIds(previous: StoredFact[], extracted: ExtractedFact[]): MatchedFact[] {
+export function matchFactIds(previous: StoredFact[], extracted: ContextualFact[]): MatchedFact[] {
   const byHash = new Map<string, StoredFact[]>();
   for (const fact of previous) {
     const bucket = byHash.get(fact.contentHash);

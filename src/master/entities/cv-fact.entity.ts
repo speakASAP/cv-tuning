@@ -32,6 +32,25 @@ export class CvFactEntity {
   @Column({ type: 'text', nullable: true })
   metric!: string | null;
 
+  /**
+   * Derived heading context (spec §4.1). Walked out of the master markdown in code
+   * (`fact-provenance.ts`), NEVER reported by the extraction model — an LLM naming the
+   * employer or the date range is a fabrication surface on the fields an employer judges a
+   * CV by. Null whenever the fact could not be confidently mapped to a heading block; a
+   * wrong employer is worse than an absent one, and heading-less CVs are a valid input.
+   *
+   * Deliberately NOT part of `contentHash`: re-titling a job heading must not orphan every
+   * fact under it and break the provenance links tailored CVs already hold.
+   */
+  @Column({ type: 'text', nullable: true })
+  section!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  org!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  period!: string | null;
+
   /** Stable identity across edits: unchanged bullets keep their id, so provenance survives. */
   @Index('idx_fact_content_hash')
   @Column({ type: 'text' })

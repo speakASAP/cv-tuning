@@ -91,6 +91,72 @@ describe('FactExtractorService', () => {
     await expect(new FactExtractorService(ai as never).extract('# CV')).rejects.toThrow(/degraded/i);
   });
 
+  it('derives section, org and period from the markdown headings, not from the model', async () => {
+    // The model is never asked for the employer or the date range (spec §6): reporting
+    // them is a fabrication surface on exactly the fields an employer judges a CV by.
+    // They are walked out of the markdown structure in code instead.
+    const ai = aiReturning({
+      facts: [{ kind: 'achievement', text: 'Cut churn 23%', payload: {}, metric: '23%' }],
+    });
+    const markdown = [
+      '# Jane Doe',
+      '',
+      '## Experience',
+      '',
+      '### Senior Developer — Acme Corp (2019 – 2024)',
+      '',
+      '- Cut churn 23%',
+    ].join('\n');
+
+    const [fact] = await new FactExtractorService(ai as never).extract(markdown);
+
+    expect(fact.section).toBe('Experience');
+    expect(fact.org).toBe('Acme Corp');
+    expect(fact.period).toBe('2019 – 2024');
+  });
+
+  it('never asks the model for section, org or period', async () => {
+    const ai = aiReturning({ facts: [] });
+
+    await new FactExtractorService(ai as never).extract('# CV');
+
+    const call = (ai.complete.mock.calls as unknown as [{ systemPrompt: string; outputSchema: unknown }][])[0][0];
+    const schema = JSON.stringify(call.outputSchema);
+    for (const field of ['section', 'org', 'period']) {
+      expect(schema).not.toContain(field);
+      expect(call.systemPrompt).not.toContain(field);
+    }
+  });
+
+  it('leaves context null for a fact the model rephrased away from any source line', async () => {
+    // A fact that maps to no heading block has no provable home. Attaching the nearest
+    // heading would print an employer the CV never connected the claim to.
+    const ai = aiReturning({
+      facts: [{ kind: 'achievement', text: 'Won an unrelated award', payload: {}, metric: null }],
+    });
+    const markdown = '## Experience\n\n### Senior Developer — Acme Corp (2019)\n\n- Cut churn 23%';
+
+    const [fact] = await new FactExtractorService(ai as never).extract(markdown);
+
+    expect(fact.section).toBeNull();
+    expect(fact.org).toBeNull();
+    expect(fact.period).toBeNull();
+  });
+
+  it('returns null context for heading-less markdown rather than inventing structure', async () => {
+    // gdocs and document imports pass user-authored markdown through with no structural
+    // guarantee at all; that is an expected input, not a failure.
+    const ai = aiReturning({
+      facts: [{ kind: 'achievement', text: 'Cut churn 23%', payload: {}, metric: null }],
+    });
+
+    const [fact] = await new FactExtractorService(ai as never).extract('Cut churn 23%\nLed the migration');
+
+    expect(fact.section).toBeNull();
+    expect(fact.org).toBeNull();
+    expect(fact.period).toBeNull();
+  });
+
   it('raises rather than returning facts when the markdown is empty', async () => {
     const ai = aiReturning({ facts: [] });
 
