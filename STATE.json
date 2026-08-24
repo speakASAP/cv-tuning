@@ -54,9 +54,9 @@
     }
   },
   "tests": {
-    "suites": 44,
-    "cases": 511,
-    "passed": 500,
+    "suites": 45,
+    "cases": 514,
+    "passed": 503,
     "skipped": 11,
     "command": "npm test",
     "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
