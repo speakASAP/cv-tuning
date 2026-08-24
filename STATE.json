@@ -55,8 +55,8 @@
   },
   "tests": {
     "suites": 32,
-    "cases": 322,
-    "passed": 311,
+    "cases": 324,
+    "passed": 313,
     "skipped": 11,
     "command": "npm test",
     "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
@@ -68,7 +68,7 @@
   "openItems": [
     "JWKS exception request for local token verification (spec 3.2)",
     "Model benchmark (Phase 8) gates premium and all pricing",
-    "Phase 3 eval harness has no recorded baseline yet. ROOT CAUSE CORRECTED 2026-08-24: the defect is NOT in ai-microservice. Live test against the deployed pod (image 5a35410) returns model_used=\"smart\", tier_used=\"smart\", model_resolved=TRUE — LiteLLM DOES return a `model` field, it just echoes the ALIAS (\"smart\") instead of the resolved upstream model id. Verified by querying LiteLLM directly at /v1/chat/completions: `model` came back as literally \"smart\". So the `body.model ?? model` fallback in ai.service.ts never fires, and model_resolved cannot detect this case. REMAINING FIX belongs in litellm_config.yaml (LiteLLM must report the real upstream model, e.g. via litellm_params.model passthrough or a callback that rewrites the response model field) — NOT in ai-microservice or cv-tuning. Until then cv-tuning still correctly refuses these completions as degraded (spec 8.1) and the eval baseline stays blocked.",
+    "Phase 3 eval harness has no recorded baseline yet: run src/applications/__evals__/run-eval.ts against the live ai-microservice and record the table before the next prompt edit. THE UPSTREAM BLOCKER IS NOW FIXED (2026-08-24): ai-microservice resolves the real served model from the x-litellm-model-id header via a cached /model/info lookup, because LiteLLM 1.82.6 echoes the tier ALIAS in the response body and has no setting to change that. Live-verified on pod image f136760: smart -> openrouter/google/gemma-4-31b-it:free, cheap -> openrouter/google/gemma-4-26b-a4b-it:free, both model_resolved=true, served_by_fallback=false, both exactly matching cv-tuning EXPECTED_MODELS. So degraded=false on a healthy call and TailorService/ReviseService no longer refuse. REMAINING WORK IS ONLY TO RUN THE EVAL and record the table.",
     "Phase 4 export produces a name + ONE honest section (\"Tailored Highlights\"), not a full multi-section CV. Full reconstruction with real per-entry org/period needs a schema change: facts must carry section/org/period explicitly, or the master CV must be parsed structurally at import. Top Phase 5 candidate.",
     "No retry path after an export failure at approve: the application sits `approved` with `stateError` and cannot be re-approved (the state guard rejects non-in_review). Phase 5 candidate.",
     "Bullet identity is text-string equality only — TailoredBullet has no stable id, so two overreach bullets with identical text in one render are indistinguishable to confirmClaim and the approval gate."
