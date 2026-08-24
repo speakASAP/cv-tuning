@@ -2,6 +2,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { NudgeController } from './nudge.controller';
 
+const APP_ID = '11111111-1111-4111-8111-111111111111';
+
 /**
  * The dispatcher lives in another repo, so this pins the CONTRACT between the two halves:
  * the workflow document names the header, BPCP resolves `${env:VAR}` into it, and this
@@ -41,7 +43,7 @@ describe('nudge callback contract', () => {
 
   it('the callback body BPCP posts carries the applicationId where the controller looks for it', async () => {
     const application = {
-      id: 'app-1',
+      id: APP_ID,
       state: 'downloaded',
       nudgedAt: null,
       outcome: null,
@@ -61,13 +63,13 @@ describe('nudge callback contract', () => {
     const bpcpEnvelope = {
       actionId: 'send-outcome-nudge',
       parameters: { url: 'http://cv-tuning:3379/api/nudges/outcome' },
-      context: { applicationId: 'app-1', userId: 'user-1' },
+      context: { applicationId: APP_ID, userId: 'user-1' },
     };
 
     await controller.outcomeNudge('shhh', bpcpEnvelope);
 
     expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({ applicationId: 'app-1', company: null }),
+      expect.objectContaining({ applicationId: APP_ID, company: null }),
     );
   });
 });

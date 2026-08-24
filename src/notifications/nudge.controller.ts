@@ -18,6 +18,8 @@ import { NotificationClientService } from './notification-client.service';
 export const NUDGE_CALLBACK_SECRET = 'CV_NUDGE_CALLBACK_SECRET';
 export const NUDGE_RECIPIENT = 'CV_NUDGE_RECIPIENT';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** The envelope BPCP's ActionDispatcherService posts: `{actionId, parameters, context}`. */
 interface BpcpActionCallback {
   actionId?: string;
@@ -57,6 +59,14 @@ export class NudgeController {
     const applicationId = body.context?.applicationId;
     if (typeof applicationId !== 'string' || applicationId.length === 0) {
       throw new BadRequestException('nudge callback carries no context.applicationId');
+    }
+    if (!UUID.test(applicationId)) {
+      // `cv_application.id` is a uuid column, so a malformed id reaches Postgres as a cast
+      // error and surfaces as a bare 500 — "Internal server error" for what is plainly a
+      // malformed callback, and BPCP then retries it three times as a transient failure.
+      throw new BadRequestException(
+        `nudge callback carries a context.applicationId that is not a uuid: "${applicationId}"`,
+      );
     }
 
     const application = await this.applications.findOne({ where: { id: applicationId } });
