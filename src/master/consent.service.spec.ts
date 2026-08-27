@@ -33,4 +33,21 @@ describe('ConsentService', () => {
     expect(result.consentVersion).toBe(CV_CONSENT_VERSION);
     expect(result.consentAt).not.toBe(at);
   });
+
+  describe('hasCurrentConsent', () => {
+    it('is true only when the stored version matches the current notice', async () => {
+      const { service } = make({ userId: 'u1', consentVersion: CV_CONSENT_VERSION });
+      await expect(service.hasCurrentConsent('u1')).resolves.toBe(true);
+    });
+
+    it('is false for a stale consent version', async () => {
+      const { service } = make({ userId: 'u1', consentVersion: 'old' });
+      await expect(service.hasCurrentConsent('u1')).resolves.toBe(false);
+    });
+
+    it('is false when the user has no profile at all', async () => {
+      const { service } = make(null);
+      await expect(service.hasCurrentConsent('u1')).resolves.toBe(false);
+    });
+  });
 });

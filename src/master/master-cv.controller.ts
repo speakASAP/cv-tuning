@@ -13,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
+import { ConsentGuard } from './consent.guard';
 import { ImportGdocsDto } from './dto/import-gdocs.dto';
 import { SaveMasterDto } from './dto/save-master.dto';
 import { MinioService } from '../storage/minio.service';
@@ -50,18 +51,21 @@ export class MasterCvController {
   ) {}
 
   @Post()
+  @UseGuards(ConsentGuard)
   async save(@Req() req: AuthedRequest, @Body() body: SaveMasterDto) {
     // The user id always comes from the validated token, never from the body.
     return this.master.save(req.user.id, body.markdown, 'paste', undefined);
   }
 
   @Post('import/gdocs')
+  @UseGuards(ConsentGuard)
   async importGdocs(@Req() req: AuthedRequest, @Body() body: ImportGdocsDto) {
     const markdown = await this.gdocs.fetchMarkdown(body.url);
     return this.master.save(req.user.id, markdown, 'gdocs', body.url);
   }
 
   @Post('import/upload')
+  @UseGuards(ConsentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async importUpload(@Req() req: AuthedRequest, @UploadedFile() file?: UploadedDocument) {
     if (!file) {

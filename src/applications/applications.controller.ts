@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
+import { ConsentGuard } from '../master/consent.guard';
 import { ApplicationsService } from './applications.service';
 import { SupplementsService } from './supplements.service';
 import { GenerateCoverLetterDto } from './dto/generate-cover-letter.dto';
@@ -36,12 +37,14 @@ export class ApplicationsController {
   ) {}
 
   @Post()
+  @UseGuards(ConsentGuard)
   async create(@Req() req: AuthedRequest, @Body() body: CreateApplicationDto) {
     // The user id always comes from the validated token, never from the body.
     return this.applications.create(req.user.id, body.jobId, body.renderLanguage);
   }
 
   @Post(':id/regenerate')
+  @UseGuards(ConsentGuard)
   async regenerate(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.regenerate(req.user.id, id);
   }
@@ -71,6 +74,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/revise')
+  @UseGuards(ConsentGuard)
   async revise(
     @Req() req: AuthedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -85,6 +89,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/renders/:revisionNo/confirm-claim')
+  @UseGuards(ConsentGuard)
   async confirmClaim(
     @Req() req: AuthedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,6 +100,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/approve')
+  @UseGuards(ConsentGuard)
   async approve(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.approve(req.user.id, id);
   }
@@ -104,6 +110,7 @@ export class ApplicationsController {
    * `ApplicationsService.retryExport` for why the approval guard stays absolute.
    */
   @Post(':id/retry-export')
+  @UseGuards(ConsentGuard)
   async retryExport(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.applications.retryExport(req.user.id, id);
   }
@@ -155,6 +162,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/cover-letter')
+  @UseGuards(ConsentGuard)
   async generateCoverLetter(
     @Req() req: AuthedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -164,6 +172,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/screening')
+  @UseGuards(ConsentGuard)
   async generateScreening(
     @Req() req: AuthedRequest,
     @Param('id', ParseUUIDPipe) id: string,

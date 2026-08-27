@@ -13,11 +13,12 @@ import { LinkedinImporter } from './importers/linkedin.importer';
 import { MasterCvController } from './master-cv.controller';
 import { MasterCvService } from './master-cv.service';
 import { ConsentService } from './consent.service';
+import { ConsentGuard } from './consent.guard';
 
 @Module({
   imports: [TypeOrmModule.forFeature([CvProfileEntity, CvMasterEntity, CvFactEntity]), AuthModule, AiModule, StorageModule],
   controllers: [MasterCvController],
-  providers: [MasterCvService, FactExtractorService, GdocsImporter, DocumentImporter, LinkedinImporter, ConsentService],
-  exports: [MasterCvService],
+  providers: [MasterCvService, FactExtractorService, GdocsImporter, DocumentImporter, LinkedinImporter, ConsentService, ConsentGuard],
+  exports: [MasterCvService, ConsentService, ConsentGuard],
 })
 export class MasterModule {}

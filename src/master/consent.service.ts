@@ -34,4 +34,15 @@ export class ConsentService {
     }
     return this.profiles.save(saved);
   }
+
+  /**
+   * Whether the user currently holds consent for the published notice version. Consent is
+   * to a SPECIFIC version (spec §9): an older grant does not count once the notice changes,
+   * so re-publishing the notice re-gates every processing route until the user re-consents.
+   * A missing profile is simply "no consent" — the caller decides what that forbids.
+   */
+  async hasCurrentConsent(userId: string, version = CV_CONSENT_VERSION): Promise<boolean> {
+    const profile = await this.profiles.findOne({ where: { userId } });
+    return !!profile && profile.consentVersion === version;
+  }
 }

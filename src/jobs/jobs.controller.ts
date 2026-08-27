@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
+import { ConsentGuard } from '../master/consent.guard';
 import { PasteJobDto } from './dto/paste-job.dto';
 import { SubmitJobDto } from './dto/submit-job.dto';
 import { SupplyTextDto } from './dto/supply-text.dto';
@@ -45,6 +46,7 @@ export class JobsController {
   }
 
   @Post(':id/score')
+  @UseGuards(ConsentGuard)
   async score(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.jobs.score(req.user.id, id);
   }
