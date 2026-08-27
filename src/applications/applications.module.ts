@@ -13,13 +13,20 @@ import { CvApplicationEntity } from './entities/cv-application.entity';
 import { CvArtifactEntity } from './entities/cv-artifact.entity';
 import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
+import { CvSupplementEntity } from './entities/cv-supplement.entity';
 import { EntailService } from './entail.service';
 import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CvApplicationEntity, CvRenderEntity, CvChatEntity, CvArtifactEntity]),
+    TypeOrmModule.forFeature([
+      CvApplicationEntity,
+      CvRenderEntity,
+      CvChatEntity,
+      CvArtifactEntity,
+      CvSupplementEntity,
+    ]),
     AuthModule,
     AiModule,
     MasterModule,

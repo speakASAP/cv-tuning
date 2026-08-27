@@ -5,6 +5,7 @@ import { CvApplicationEntity } from '../applications/entities/cv-application.ent
 import { CvArtifactEntity } from '../applications/entities/cv-artifact.entity';
 import { CvChatEntity } from '../applications/entities/cv-chat.entity';
 import { CvRenderEntity } from '../applications/entities/cv-render.entity';
+import { CvSupplementEntity } from '../applications/entities/cv-supplement.entity';
 import { CvJobEntity } from '../jobs/entities/cv-job.entity';
 import { CvFactEntity } from '../master/entities/cv-fact.entity';
 import { CvMasterEntity } from '../master/entities/cv-master.entity';
@@ -19,6 +20,7 @@ export const CV_ENTITIES = [
   CvRenderEntity,
   CvChatEntity,
   CvArtifactEntity,
+  CvSupplementEntity,
 ];
 
 @Module({
