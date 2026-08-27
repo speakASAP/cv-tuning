@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createHmac } from 'crypto';
+import { pseudonymizePrompt } from './pseudonymize';
 
 export const AI_FETCH = 'CV_AI_FETCH';
 export const AI_SERVICE_URL = 'CV_AI_SERVICE_URL';
@@ -82,8 +83,8 @@ export class AiClientService {
         signal: controller.signal,
         body: JSON.stringify({
           model_tier: input.tier,
-          system_prompt: input.systemPrompt,
-          user_prompt: this.withSchema(input.userPrompt, input.outputSchema),
+          system_prompt: pseudonymizePrompt(input.systemPrompt),
+          user_prompt: pseudonymizePrompt(this.withSchema(input.userPrompt, input.outputSchema)),
           output_schema: input.outputSchema,
           max_tokens: input.maxTokens ?? 8000,
           correlation_id: input.correlationId,
