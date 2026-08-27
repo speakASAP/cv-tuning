@@ -313,7 +313,7 @@ function normalizeBulletText(text: string): string {
  * A master with no contact block yields an empty array, which emits nothing. That is a normal
  * input, not a failure.
  */
-function extractContactLines(markdown: string): string[] {
+export function extractContactLines(markdown: string): string[] {
   const parts: string[] = [];
   let seenH1 = false;
 
