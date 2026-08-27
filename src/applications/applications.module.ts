@@ -14,7 +14,10 @@ import { CvArtifactEntity } from './entities/cv-artifact.entity';
 import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
 import { CvSupplementEntity } from './entities/cv-supplement.entity';
+import { CoverLetterService } from './cover-letter.service';
 import { EntailService } from './entail.service';
+import { ScreeningService } from './screening.service';
+import { SupplementsService } from './supplements.service';
 import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
 
@@ -36,7 +39,15 @@ import { TailorService } from './tailor.service';
     BpcpModule,
   ],
   controllers: [ApplicationsController],
-  providers: [ApplicationsService, TailorService, EntailService, ReviseService],
-  exports: [ApplicationsService],
+  providers: [
+    ApplicationsService,
+    TailorService,
+    EntailService,
+    ReviseService,
+    CoverLetterService,
+    ScreeningService,
+    SupplementsService,
+  ],
+  exports: [ApplicationsService, SupplementsService],
 })
 export class ApplicationsModule {}
