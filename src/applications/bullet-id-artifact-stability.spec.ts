@@ -16,9 +16,9 @@ import { CvPdfService } from '../export/cv-pdf.service';
  * fails if the id reaches the page by any route, not only the obvious one.
  */
 const FACTS = [
-  { factId: 'f1', section: 'Experience', title: 'Senior Developer', org: 'Acme', period: '2019-2024' },
+  { factId: 'f1', text: 'ran postgres', kind: 'achievement', section: 'Experience', title: 'Senior Developer', org: 'Acme', period: '2019-2024' },
   // Same entry, different fact: the identical-text case bulletId exists for.
-  { factId: 'f2', section: 'Experience', title: 'Senior Developer', org: 'Acme', period: '2019-2024' },
+  { factId: 'f2', text: 'improved reliability', kind: 'achievement', section: 'Experience', title: 'Senior Developer', org: 'Acme', period: '2019-2024' },
 ];
 
 const MASTER =

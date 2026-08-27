@@ -31,7 +31,15 @@ describe('buildRenderMarkdown', () => {
   // Bullets whose source fact is absent from the snapshot land in the general section with no
   // org or period — the shape every render had before facts carried section/org/period, and
   // still the shape for facts extracted before that migration (which did not backfill).
-  const UNMAPPED: { factId: string; section: null; org: null; period: null; title: null }[] = [];
+  const UNMAPPED: {
+    factId: string;
+    text: string;
+    kind: string;
+    section: null;
+    org: null;
+    period: null;
+    title: null;
+  }[] = [];
 
   it('produces H1 name + one H2 holding bullets whose facts carry no derivable section', () => {
     const markdown = buildRenderMarkdown(
@@ -648,5 +656,179 @@ describe('buildRenderMarkdown: entry titles', () => {
     expect(entry.period).toBe('2019-2024');
     expect(entry.title).not.toBeNull();
     expect(entry.title).not.toContain('—');
+  });
+});
+
+describe('buildRenderMarkdown: proof of work', () => {
+  const fact = (
+    factId: string,
+    text: string,
+    kind: string,
+    section: string | null = 'Experience',
+    org: string | null = 'Acme',
+    period: string | null = '2019-2024',
+    title: string | null = 'Senior Developer',
+  ) => ({ factId, text, kind, section, org, period, title });
+
+  const bullet = (text: string, sourceFactId: string) => ({ text, sourceFactId });
+
+  const ACHIEVEMENT = fact('f1', 'Cut latency to 220ms', 'achievement');
+
+  it('emits a Proof of Work section from proof facts', () => {
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency to 220ms', 'f1')],
+      [ACHIEVEMENT, fact('p1', 'Portfolio — https://jane.dev', 'proof')],
+    );
+
+    expect(markdown).toContain('## Proof of Work');
+    expect(markdown).toContain('- Portfolio — https://jane.dev');
+  });
+
+  it('omits the section entirely when no proof facts exist', () => {
+    // An empty heading is a defect the CV's reader sees.
+    const markdown = buildRenderMarkdown('# Jane Doe', [bullet('Cut latency', 'f1')], [ACHIEVEMENT]);
+    expect(markdown).not.toContain('Proof of Work');
+  });
+
+  it('omits the section when the only proof fact is blank', () => {
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency', 'f1')],
+      [ACHIEVEMENT, fact('p1', '   ', 'proof')],
+    );
+    expect(markdown).not.toContain('Proof of Work');
+  });
+
+  it('writes a proof fact with no URL as its label alone, never as a dangling dash', () => {
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency', 'f1')],
+      [ACHIEVEMENT, fact('p1', 'Rewrote the billing engine, described in a case study', 'proof')],
+    );
+
+    const doc = renderToDocument(markdown);
+    const proof = doc.sections.find((s) => s.heading === 'Proof of Work');
+    expect(proof?.entries[0].bullets).toEqual([
+      'Rewrote the billing engine, described in a case study',
+    ]);
+  });
+
+  it('places Proof of Work after the real sections and before the general catch-all', () => {
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency', 'f1'), bullet('Orphan bullet', 'f9')],
+      [ACHIEVEMENT, fact('p1', 'https://jane.dev', 'proof')],
+    );
+
+    expect(renderToDocument(markdown).sections.map((s) => s.heading)).toEqual([
+      'Experience',
+      'Proof of Work',
+      'Additional Highlights',
+    ]);
+  });
+
+  it('is derived from the facts, not the bullets: a proof fact no bullet cites still renders', () => {
+    // A proof link is not a tailored claim and has no sourceFactId binding — it is reproduced
+    // verbatim, which is exactly why it needs no entailment pass.
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency to 220ms', 'f1')],
+      [ACHIEVEMENT, fact('p1', 'https://github.com/jane/thing', 'proof')],
+    );
+
+    expect(markdown).toContain('https://github.com/jane/thing');
+  });
+
+  it('keeps proof items in facts-array order and de-duplicates by URL', () => {
+    const markdown = buildRenderMarkdown(
+      '# Jane Doe',
+      [bullet('Cut latency', 'f1')],
+      [
+        ACHIEVEMENT,
+        fact('p1', 'Portfolio — https://jane.dev', 'proof'),
+        fact('p2', 'Repo — https://github.com/jane/thing', 'proof'),
+        // Same URL, different label: one item, first label wins.
+        fact('p3', 'My site — https://jane.dev', 'proof'),
+      ],
+    );
+
+    const proof = renderToDocument(markdown).sections.find((s) => s.heading === 'Proof of Work');
+    expect(proof?.entries[0].bullets).toEqual([
+      'Portfolio — https://jane.dev',
+      'Repo — https://github.com/jane/thing',
+    ]);
+  });
+
+  it('ignores the facts array order for proof exactly as it does for sections', () => {
+    const facts = [
+      ACHIEVEMENT,
+      fact('p1', 'Portfolio — https://jane.dev', 'proof'),
+      fact('p2', 'Repo — https://github.com/jane/thing', 'proof'),
+    ];
+    const bullets = [bullet('Cut latency', 'f1')];
+
+    // Proof order follows the FACTS array (a proof fact has no bullet to order it by), so
+    // reordering the facts legitimately reorders proof. Pinned so the contract is explicit
+    // rather than discovered later by a diffing sha256.
+    const reordered = buildRenderMarkdown('# Jane Doe', bullets, [facts[0], facts[2], facts[1]]);
+    const proof = renderToDocument(reordered).sections.find((s) => s.heading === 'Proof of Work');
+    expect(proof?.entries[0].bullets).toEqual([
+      'Repo — https://github.com/jane/thing',
+      'Portfolio — https://jane.dev',
+    ]);
+  });
+
+  it('is byte-identical across repeated calls with a proof section present', () => {
+    const facts = [ACHIEVEMENT, fact('p1', 'Portfolio — https://jane.dev', 'proof')];
+    const bullets = [bullet('Cut latency', 'f1')];
+    expect(buildRenderMarkdown('# Jane Doe', bullets, facts)).toBe(
+      buildRenderMarkdown('# Jane Doe', bullets, facts),
+    );
+  });
+
+  it('survives the confirmClaim round-trip with a proof section present', () => {
+    // confirmClaim re-renders from a prior render's OWN markdown. A new section must not
+    // perturb the contact-block extraction between the H1 and the first `## `, and must not
+    // accumulate a second copy of itself on pass three.
+    const MASTER = '# Jane Doe\n\njane@example.com | +420 777\n\n## Experience\n\n- Cut latency\n';
+    const facts = [ACHIEVEMENT, fact('p1', 'Portfolio — https://jane.dev', 'proof')];
+    const bullets = [bullet('Cut latency to 220ms', 'f1')];
+
+    const pass1 = buildRenderMarkdown(MASTER, bullets, facts);
+    const pass2 = buildRenderMarkdown(pass1, bullets, facts);
+    const pass3 = buildRenderMarkdown(pass2, bullets, facts);
+
+    expect(pass2).toBe(pass1);
+    expect(pass3).toBe(pass2);
+    expect(extractH1Name(pass3)).toBe('Jane Doe');
+
+    const doc = renderToDocument(pass3);
+    expect(doc.contact.parts).toEqual(['jane@example.com', '+420 777']);
+    expect(doc.sections.filter((s) => s.heading === 'Proof of Work')).toHaveLength(1);
+  });
+
+  it('does not let a proof URL be mistaken for a contact line on the round trip', () => {
+    // The proof section sits after the first `## `, so extractContactLines must stop before
+    // it. A link leaking into contact.parts would put a portfolio URL in the CV's header.
+    const MASTER = '# Jane Doe\n\njane@example.com\n\n## Experience\n\n- Cut latency\n';
+    const rendered = buildRenderMarkdown(
+      MASTER,
+      [bullet('Cut latency', 'f1')],
+      [ACHIEVEMENT, fact('p1', 'Portfolio — https://jane.dev', 'proof')],
+    );
+
+    expect(renderToDocument(buildRenderMarkdown(rendered, [bullet('Cut latency', 'f1')], [
+      ACHIEVEMENT,
+      fact('p1', 'Portfolio — https://jane.dev', 'proof'),
+    ])).contact.parts).toEqual(['jane@example.com']);
+  });
+
+  it('emits a proof section even when there are no bullets at all', () => {
+    // A user with proof facts and no tailored bullets still has something worth exporting,
+    // and the document must stay parseable.
+    const markdown = buildRenderMarkdown('# Jane Doe', [], [fact('p1', 'https://jane.dev', 'proof')]);
+    expect(() => renderToDocument(markdown)).not.toThrow();
+    expect(renderToDocument(markdown).sections.map((s) => s.heading)).toEqual(['Proof of Work']);
   });
 });

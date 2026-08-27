@@ -1,4 +1,5 @@
 import { FactSnapshot, TailoredBullet } from './application.types';
+import { selectProofFacts } from '../master/proof';
 
 const H1 = /^#\s+(.+?)\s*$/;
 
@@ -18,6 +19,15 @@ const LIST_OR_QUOTE = /^(?:[-*+]\s|>)/;
  * rather than creating a second section with the same heading.
  */
 const GENERAL_SECTION = 'Additional Highlights';
+
+/**
+ * Heading for `cv_fact.kind = 'proof'` facts — portfolio links, repositories, case studies.
+ *
+ * Emitted between the real sections and `GENERAL_SECTION`: proof is stronger evidence than the
+ * orphan catch-all and belongs above it, but it is not one of the master CV's own sections and
+ * must not displace them.
+ */
+const PROOF_SECTION = 'Proof of Work';
 
 /** `cv-document.ts`'s mandatory entry separator. A hyphen is not it — see ENTRY_HEADING there. */
 const EM_DASH = '—';
@@ -116,7 +126,7 @@ interface RenderSection {
 export function buildRenderMarkdown(
   sourceMarkdown: string,
   bullets: Pick<TailoredBullet, 'text' | 'sourceFactId'>[],
-  facts: Pick<FactSnapshot, 'factId' | 'section' | 'title' | 'org' | 'period'>[],
+  facts: Pick<FactSnapshot, 'factId' | 'text' | 'kind' | 'section' | 'title' | 'org' | 'period'>[],
 ): string {
   const name = extractH1Name(sourceMarkdown);
   const contact = extractContactLines(sourceMarkdown);
@@ -177,7 +187,14 @@ export function buildRenderMarkdown(
   if (contact.length > 0) {
     parts.push(contact.join(' | '));
   }
+  const proof = selectProofFacts(facts);
+
   for (const section of ordered) {
+    // Proof sits above the orphan catch-all, so it is emitted when the general section is
+    // reached rather than appended after the loop.
+    if (section.heading === GENERAL_SECTION) {
+      appendProofSection(parts, proof);
+    }
     parts.push(`## ${section.heading}`);
     for (const entry of section.entries) {
       parts.push(`### ${entryHeading(entry)}`);
@@ -185,14 +202,49 @@ export function buildRenderMarkdown(
     }
   }
 
+  const hasGeneralSection = ordered.some((s) => s.heading === GENERAL_SECTION);
+  if (!hasGeneralSection) {
+    appendProofSection(parts, proof);
+  }
+
   // A render with no bullets still needs a section: `cv-document.ts` raises on a bullet or
   // entry that precedes any `## `, and a nameless-but-sectionless document is not a shape the
-  // rest of the pipeline expects.
-  if (ordered.length === 0) {
+  // rest of the pipeline expects. A proof-only render already satisfies that, so the empty
+  // catch-all is emitted only when nothing else was.
+  if (ordered.length === 0 && proof.length === 0) {
     parts.push(`## ${GENERAL_SECTION}`);
   }
 
   return parts.join('\n\n');
+}
+
+/**
+ * Writes the proof section, or nothing at all when there is no proof to write.
+ *
+ * The emptiness check is the whole point of the helper: an `## Proof of Work` heading with no
+ * items under it is a defect the CV's reader sees, on a document that goes to an employer.
+ *
+ * Items are reproduced verbatim from the fact text (see `master/proof.ts`), which is why this
+ * path needs no entailment pass — a proof link is not a tailored claim, nothing was rewritten,
+ * and there is no `sourceFactId` binding to validate. It is deliberately derived from `facts`
+ * rather than from the bullets for the same reason: no bullet cites a portfolio URL, so a
+ * bullets-derived proof section would always be empty.
+ *
+ * Every item is emitted under a bare `### —` entry heading. `cv-document.ts` attaches a bullet
+ * to the most recently opened entry, so proof bullets emitted with no heading of their own
+ * would be read as more of the previous section's last employer — a real company stamped onto
+ * a link the fact graph never connected to it.
+ */
+function appendProofSection(parts: string[], proof: ReturnType<typeof selectProofFacts>): void {
+  if (proof.length === 0) {
+    return;
+  }
+
+  parts.push(`## ${PROOF_SECTION}`);
+  parts.push(`### ${EM_DASH}`);
+  parts.push(
+    ...proof.map((item) => `- ${item.url ? `${item.label} ${EM_DASH} ${item.url}` : item.label}`),
+  );
 }
 
 /**
