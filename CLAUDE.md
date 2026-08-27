@@ -275,3 +275,11 @@ and is a contract — the render feeds a sha256 that spec §6.3 reuses as artifa
   runs and the aborted attempts leave no trace in the proxy log.
 - Commit to `main` and the ecosystem deploy queue picks it up; don't run `deploy.sh` by hand
   unless rolling back or explicitly asked.
+- **Privacy boundary:** `AiClientService.complete()` pseudonymizes both system and user prompts
+  before the request crosses into `ai-microservice`; local renderers continue to use the original
+  master contact data. Keep new LLM callers behind this shared client rather than calling the
+  upstream service directly.
+- **Consent evidence:** `ConsentService` stores the published CV-processing notice version and
+  timestamp on `cv_profile`. `GET/POST /api/master/consent` are authenticated and derive the
+  user id from `CvAuthGuard`; repeated grants for the same version preserve the original
+  evidence timestamp. Consent enforcement on processing routes remains a subsequent Phase 7 gate.
