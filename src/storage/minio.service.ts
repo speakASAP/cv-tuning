@@ -54,6 +54,44 @@ export class MinioService {
     return Buffer.from(await response.arrayBuffer());
   }
 
+  /**
+   * Deletes an object and VERIFIES it is gone (spec §9: the hard-delete cascade must never
+   * fire-and-forget). S3/MinIO returns 204 for a DELETE even when the key never existed, so a
+   * 2xx alone proves nothing; the follow-up existence check is what makes deletion auditable.
+   * Deleting an already-absent key verifies clean, so re-running a partially-completed cascade
+   * is safe.
+   */
+  async deleteObject(key: string): Promise<void> {
+    const response = await this.send('DELETE', key, Buffer.alloc(0), 'application/octet-stream');
+
+    if (response.status !== 204 && response.status !== 200) {
+      const detail = await response.text().catch(() => '<unreadable>');
+      this.logger.error(`MinIO DELETE ${this.config.bucket}/${key} returned ${response.status}: ${detail.slice(0, 200)}`);
+      throw new Error(`failed to delete ${key}: MinIO returned ${response.status}`);
+    }
+
+    if (await this.objectExists(key)) {
+      // The DELETE reported success but the object is still readable. Surfacing this rather
+      // than trusting the 2xx is the whole point of a verified delete.
+      this.logger.error(`MinIO DELETE ${this.config.bucket}/${key} reported success but the object is still present`);
+      throw new Error(`failed to delete ${key}: object still present after DELETE`);
+    }
+
+    this.logger.log(`deleted ${this.config.bucket}/${key}`);
+  }
+
+  /** True if the object is readable, false on a 404. Any other status raises rather than guessing. */
+  async objectExists(key: string): Promise<boolean> {
+    const response = await this.send('HEAD', key, Buffer.alloc(0), 'application/octet-stream');
+
+    if (response.status === 200) return true;
+    if (response.status === 404) return false;
+
+    const detail = await response.text().catch(() => '<unreadable>');
+    this.logger.error(`MinIO HEAD ${this.config.bucket}/${key} returned ${response.status}: ${detail.slice(0, 200)}`);
+    throw new Error(`failed to stat ${key}: MinIO returned ${response.status}`);
+  }
+
   private async send(method: string, key: string, body: Buffer, contentType: string): Promise<Response> {
     const region = this.config.region ?? 'us-east-1';
     const path = `/${this.config.bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
