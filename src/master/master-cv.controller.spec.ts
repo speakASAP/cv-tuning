@@ -10,6 +10,7 @@ describe('MasterCvController', () => {
   let linkedin: any;
   let storage: any;
   let controller: MasterCvController;
+  let consent: any;
 
   beforeEach(() => {
     service = {
@@ -23,7 +24,18 @@ describe('MasterCvController', () => {
     documents = { extract: jest.fn(async () => '# CV from file') };
     linkedin = { toMarkdown: jest.fn(() => '# CV from linkedin') };
     storage = { putObject: jest.fn(async (key: string) => key) };
-    controller = new MasterCvController(service, gdocs, documents, linkedin, storage);
+    consent = { get: jest.fn(async () => ({ userId: 'u1', consentVersion: '2026-08-27' })), grant: jest.fn(async () => ({ userId: 'u1', consentVersion: '2026-08-27' })) };
+    controller = new MasterCvController(service, gdocs, documents, linkedin, storage, consent);
+  });
+
+  it('reads consent only for the authenticated user', async () => {
+    await controller.getConsent(authed('real-user'));
+    expect(consent.get).toHaveBeenCalledWith('real-user');
+  });
+
+  it('records explicit consent for the authenticated user', async () => {
+    await controller.grantConsent(authed('real-user'));
+    expect(consent.grant).toHaveBeenCalledWith('real-user');
   });
 
   it('saves pasted markdown for the authenticated user', async () => {

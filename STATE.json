@@ -82,7 +82,8 @@
     "Phase 6 by decision, not oversight: no revision/chat loop for supplements. ReviseService is CV-shaped (it re-renders bullets into a cv_render) and generalising it is a larger refactor than the phase needs; regenerating produces a new revision, covering the same need at far less risk.",
     "Phase 6 by decision, not oversight: supplements are NOT in the approval gate. `approve` guards the CV artifact the user is accountable for, and widening it would let a cover-letter verdict block a CV export.",
     "SUPPLEMENT EXPORT RESOLVED 2026-08-27. Supplement PDF/DOCX artifacts are rendered once, stored in MinIO, linked through cv_artifact.supplementId, and served by the authenticated download route without replacing existing artifact rows.",
-    "PHASE 7 FOUNDATION RESOLVED 2026-08-27. All outbound AI prompts pass through src/ai/pseudonymize.ts, which redacts direct contact identifiers before the shared ai-microservice boundary; local rendering retains the original contact data."
+    "PHASE 7 FOUNDATION RESOLVED 2026-08-27. All outbound AI prompts pass through src/ai/pseudonymize.ts, which redacts direct contact identifiers before the shared ai-microservice boundary; local rendering retains the original contact data.",
+    "PHASE 7 CONSENT FOUNDATION RESOLVED 2026-08-27. ConsentService records the separately versioned CV-processing notice and consent timestamp on cv_profile, exposes authenticated GET/POST /api/master/consent, and keeps repeat grants for the same version idempotent."
   ],
   "traps": [
     "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",

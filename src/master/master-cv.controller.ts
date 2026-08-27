@@ -20,6 +20,7 @@ import { DocumentImporter } from './importers/document.importer';
 import { GdocsImporter } from './importers/gdocs.importer';
 import { LinkedinImporter } from './importers/linkedin.importer';
 import { MasterCvService } from './master-cv.service';
+import { ConsentService } from './consent.service';
 
 interface AuthedRequest {
   user: CvUser;
@@ -45,6 +46,7 @@ export class MasterCvController {
     private readonly documents: DocumentImporter,
     private readonly linkedin: LinkedinImporter,
     private readonly storage: MinioService,
+    private readonly consent: ConsentService,
   ) {}
 
   @Post()
@@ -96,6 +98,16 @@ export class MasterCvController {
       throw new NotFoundException('no master CV for this user yet');
     }
     return current;
+  }
+
+  @Get('consent')
+  async getConsent(@Req() req: AuthedRequest) {
+    return this.consent.get(req.user.id);
+  }
+
+  @Post('consent')
+  async grantConsent(@Req() req: AuthedRequest) {
+    return this.consent.grant(req.user.id);
   }
 
   @Get('facts')
