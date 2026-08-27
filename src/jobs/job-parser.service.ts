@@ -4,13 +4,17 @@ import { ParsedRequirements, REQUIREMENT_KINDS, Requirement, isRequirementKind }
 
 const FENCE = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/;
 
-const SYSTEM_PROMPT = [
+export const SYSTEM_PROMPT = [
   'You extract hiring requirements from a job posting.',
   'Extract only requirements the posting actually states. Never infer or invent one.',
   'Classify each as "must" when the posting presents it as required, or "nice" when it is',
   'presented as preferred, bonus, or optional. When the wording is ambiguous, use "nice".',
   'Detect the language of the posting and return it as an ISO 639-1 code.',
   'Keep each requirement short and specific, in the posting\'s own words where possible.',
+  'Also return screeningQuestions: questions the posting EXPLICITLY asks the applicant to',
+  'answer, in the posting\'s own wording. Return an empty array if it asks none — most',
+  'postings ask none, and that is the expected answer, not a failure to find any. Never turn a',
+  'requirement into a question, and never write a question the posting does not ask.',
 ].join(' ');
 
 const OUTPUT_SCHEMA = {
@@ -20,6 +24,7 @@ const OUTPUT_SCHEMA = {
     title: { type: ['string', 'null'] },
     company: { type: ['string', 'null'] },
     language: { type: 'string' },
+    screeningQuestions: { type: 'array', items: { type: 'string' } },
     requirements: {
       type: 'array',
       items: {
@@ -80,7 +85,24 @@ export class JobParserService {
       company: typeof payload.company === 'string' && payload.company.trim() ? payload.company.trim() : null,
       language: typeof payload.language === 'string' && payload.language.trim() ? payload.language.trim() : 'en',
       requirements: rawRequirements.map((raw, index) => this.toRequirement(raw as RawRequirement, index)),
+      screeningQuestions: this.toScreeningQuestions(payload.screeningQuestions),
     };
+  }
+
+  /**
+   * A posting that asks no screening questions is the common case, so a missing or malformed
+   * field yields an empty list rather than raising — unlike `requirements`, nothing downstream
+   * treats an empty question list as a failure, and there is no ambiguity to preserve: the
+   * user's own pasted questions are merged in separately either way.
+   */
+  private toScreeningQuestions(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter((q): q is string => typeof q === 'string')
+      .map((q) => q.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
   }
 
   private parseJson(text: string): unknown {

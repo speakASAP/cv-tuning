@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { getMetadataArgsStorage } from 'typeorm';
 import { CvSupplementEntity } from './cv-supplement.entity';
+import { CvJobEntity } from '../../jobs/entities/cv-job.entity';
 import { QUESTION_SOURCES, SUPPLEMENT_KINDS } from '../supplement.types';
 
 const MIGRATION = readFileSync(
@@ -113,5 +114,31 @@ describe('supplement enums', () => {
 
   it('names both supplement kinds', () => {
     expect(SUPPLEMENT_KINDS).toEqual(['cover_letter', 'screening']);
+  });
+});
+
+describe('cv_job screeningQuestions column', () => {
+  const JOB_MIGRATION = readFileSync(
+    join(__dirname, '../../database/migrations/1757000000000-AddJobScreeningQuestions.ts'),
+    'utf8',
+  );
+
+  it('is NOT NULL with a [] default, so "asks none" is never confused with "not parsed"', () => {
+    // A nullable column would add a third state that no consumer has a meaning for; "we have
+    // not parsed this posting" is already carried by a null `parsed`.
+    expect(JOB_MIGRATION).toContain(`"screeningQuestions" jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  });
+
+  it('declares the same default on the entity as the migration does', () => {
+    const column = getMetadataArgsStorage().columns.find(
+      (c) => c.target === CvJobEntity && c.propertyName === 'screeningQuestions',
+    );
+    expect(column?.options.type).toBe('jsonb');
+    expect(column?.options.nullable).toBeFalsy();
+    expect(String(column?.options.default?.())).toContain('[]');
+  });
+
+  it('has a real down()', () => {
+    expect(JOB_MIGRATION).toContain('DROP COLUMN "screeningQuestions"');
   });
 });

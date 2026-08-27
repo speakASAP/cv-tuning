@@ -33,6 +33,17 @@ export class CvJobEntity {
   @Column({ type: 'text', nullable: true })
   language!: string | null;
 
+  /**
+   * Questions the posting explicitly asks the applicant to answer.
+   *
+   * Stored as its own column rather than read out of `parsed` so it stays queryable and
+   * survives Phase 7's expiry of `rawText`. Defaults to `[]`, never null: "the posting asks no
+   * questions" and "we have not parsed this posting" are different states, and the second is
+   * already carried by a null `parsed`.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  screeningQuestions!: string[];
+
   /** Explicit, never inferred from an empty rawText. */
   @Index('idx_job_fetch_status')
   @Column({ type: 'text' })

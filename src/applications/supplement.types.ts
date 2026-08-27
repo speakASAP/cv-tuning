@@ -1,4 +1,5 @@
 import { EntailmentVerdict } from './application.types';
+import { QuestionSource } from '../jobs/job.types';
 
 /**
  * The application materials that are not the CV itself.
@@ -12,16 +13,13 @@ export const SUPPLEMENT_KINDS = ['cover_letter', 'screening'] as const;
 export type SupplementKind = (typeof SUPPLEMENT_KINDS)[number];
 
 /**
- * Where a screening question came from, kept on the row rather than inferred later.
- *
- * `user` is a question the applicant pasted from a real application portal. `parsed` is one
- * this service extracted from the job posting, which is a guess about what will be asked.
- * They have different reliability and MUST stay distinguishable: presenting a guessed question
- * as one the employer actually asked would have the user answer a question nobody posed, and
- * that answer would go out as though it were solicited.
+ * Re-exported from `jobs/job.types.ts`, which is the single home for it: the job parser
+ * produces screening questions, and `jobs/` sits upstream of `applications/`. Re-exporting
+ * rather than redefining keeps one definition, so the two modules cannot drift into
+ * disagreeing about what a question source is.
  */
-export const QUESTION_SOURCES = ['user', 'parsed'] as const;
-export type QuestionSource = (typeof QUESTION_SOURCES)[number];
+export { QUESTION_SOURCES } from '../jobs/job.types';
+export type { QuestionSource, ScreeningQuestion } from '../jobs/job.types';
 
 /**
  * One model-authored paragraph, bound to exactly one master fact.

@@ -1,4 +1,4 @@
-import { JobParserService } from './job-parser.service';
+import { JobParserService, SYSTEM_PROMPT } from './job-parser.service';
 
 const CHEAP_MODEL = 'openrouter/google/gemma-4-26b-a4b-it:free';
 
@@ -104,5 +104,57 @@ describe('JobParserService', () => {
     const ai = aiReturning({ title: 'Vague Role', company: null, language: 'en', requirements: [] });
 
     await expect(new JobParserService(ai as never).parse(POSTING)).resolves.toMatchObject({ requirements: [] });
+  });
+
+  it('extracts the screening questions the posting asks', async () => {
+    const ai = aiReturning({
+      requirements: [],
+      screeningQuestions: ['Why do you want to work here?', 'What is your notice period?'],
+    });
+
+    const parsed = await new JobParserService(ai as never).parse(POSTING);
+    expect(parsed.screeningQuestions).toEqual([
+      'Why do you want to work here?',
+      'What is your notice period?',
+    ]);
+  });
+
+  it('returns no screening questions when the posting asks none', async () => {
+    // The COMMON case. An empty list must never be padded to look productive.
+    const ai = aiReturning({ requirements: [], screeningQuestions: [] });
+    expect((await new JobParserService(ai as never).parse(POSTING)).screeningQuestions).toEqual([]);
+  });
+
+  it('returns an empty list rather than raising when the model omits the field', async () => {
+    // Unlike `requirements`, nothing downstream reads an empty question list as a failure, and
+    // a posting parsed before the field existed is correctly read as asking none.
+    const ai = aiReturning({ requirements: [] });
+    expect((await new JobParserService(ai as never).parse(POSTING)).screeningQuestions).toEqual([]);
+  });
+
+  it('drops non-string and blank screening questions instead of passing them through', async () => {
+    const ai = aiReturning({
+      requirements: [],
+      screeningQuestions: ['Real question?', '', '   ', 42, null],
+    });
+
+    expect((await new JobParserService(ai as never).parse(POSTING)).screeningQuestions).toEqual([
+      'Real question?',
+    ]);
+  });
+
+  it('collapses whitespace inside a screening question', async () => {
+    const ai = aiReturning({ requirements: [], screeningQuestions: ['Why   us?\n'] });
+    expect((await new JobParserService(ai as never).parse(POSTING)).screeningQuestions).toEqual([
+      'Why us?',
+    ]);
+  });
+
+  it('asks the model for questions the posting explicitly poses, not for inferred ones', async () => {
+    // Read off the module rather than the fake's call args: the instruction is the whole
+    // safeguard against a padded question list, so it is pinned directly.
+    expect(SYSTEM_PROMPT).toContain('EXPLICITLY');
+    expect(SYSTEM_PROMPT).toContain('empty array if it asks none');
+    expect(SYSTEM_PROMPT).toContain('Never turn a requirement into a question');
   });
 });
