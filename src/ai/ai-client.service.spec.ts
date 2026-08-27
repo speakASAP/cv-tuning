@@ -152,12 +152,20 @@ describe('AiClientService', () => {
   it('requests the tier it was asked for', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'x', model_used: SMART_MODEL }) });
 
-    await client.complete({ tier: 'smart', systemPrompt: 'sys', userPrompt: 'the prompt' });
+    await client.complete({
+      tier: 'smart',
+      systemPrompt: 'Use the candidate email jane@example.com only for local rendering.',
+      userPrompt: 'Name: Jane Doe\nPhone: +1 415 555 0199\nWorked as a platform engineer.',
+    });
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
     expect(body.model_tier).toBe('smart');
-    expect(body.system_prompt).toBe('sys');
-    expect(body.user_prompt).toBe('the prompt');
+    expect(body.system_prompt).not.toContain('jane@example.com');
+    expect(body.system_prompt).toContain('[EMAIL]');
+    expect(body.user_prompt).not.toContain('Jane Doe');
+    expect(body.user_prompt).not.toContain('+1 415 555 0199');
+    expect(body.user_prompt).toContain('[REDACTED]');
+    expect(body.user_prompt).toContain('platform engineer');
   });
 
   it('never uses the free tier, which is a code model unusable for prose', () => {
