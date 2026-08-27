@@ -48,6 +48,11 @@ const build = (overrides: Record<string, unknown> = {}) => {
     update: jest.fn(async () => undefined),
   };
 
+  const artifacts = { findOne: jest.fn(async () => null), save: jest.fn(async (row: Record<string, unknown>) => ({ ...row, id: 'artifact-1' })) };
+  const pdf = { renderSupplement: jest.fn(async () => ({ content: Buffer.from('pdf'), sha256: 'pdf-sha', mimeType: 'application/pdf', filename: 'x.pdf' })) };
+  const docx = { renderSupplement: jest.fn(async () => ({ content: Buffer.from('docx'), sha256: 'docx-sha', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', filename: 'x.docx' })) };
+  const storage = { putObject: jest.fn(async (key: string) => key), getObject: jest.fn(async () => Buffer.from('stored')) };
+
   const master = {
     getVersion: jest.fn(async (_userId: string, masterId: string) =>
       masterId === 'master-pinned'
@@ -103,19 +108,23 @@ const build = (overrides: Record<string, unknown> = {}) => {
     })),
   };
 
-  const deps = { supplements, applications, master, jobs, coverLetter, screening, entail, ...overrides };
+  const deps = { supplements, artifacts, applications, master, jobs, coverLetter, screening, entail, pdf, docx, storage, ...overrides };
 
   return {
     ...deps,
     saved,
     service: new SupplementsService(
       deps.supplements as never,
+      deps.artifacts as never,
       deps.applications as never,
       deps.master as never,
       deps.jobs as never,
       deps.coverLetter as never,
       deps.screening as never,
       deps.entail as never,
+      deps.pdf as never,
+      deps.docx as never,
+      deps.storage as never,
     ),
   };
 };

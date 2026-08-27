@@ -191,6 +191,39 @@ export class ApplicationsController {
       assertRevisionNo(revisionNo),
     );
   }
+
+  @Get(':id/supplements/:kind/:revisionNo/download/:artifactKind')
+  async downloadSupplement(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('kind') kind: string,
+    @Param('revisionNo') revisionNo: string,
+    @Param('artifactKind') artifactKind: string,
+    @Res() res: Response,
+  ) {
+    if (artifactKind !== 'pdf' && artifactKind !== 'docx') {
+      throw new BadRequestException(`unknown artifact kind "${artifactKind}"`);
+    }
+    const { content, artifact } = await this.supplements.export(
+      req.user.id,
+      id,
+      assertSupplementKind(kind),
+      assertRevisionNo(revisionNo),
+      artifactKind,
+    );
+    res.setHeader(
+      'content-type',
+      artifactKind === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${kind}-r${revisionNo}.${artifactKind}"`,
+    );
+    res.setHeader('content-length', String(artifact.byteSize));
+    res.send(content);
+  }
 }
 
 /**

@@ -2,13 +2,17 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { Repository } from 'typeorm';
+import { CvDocxService } from '../export/cv-docx.service';
+import { CvPdfService } from '../export/cv-pdf.service';
 import { JobsService } from '../jobs/jobs.service';
 import { MasterCvService } from '../master/master-cv.service';
+import { MinioService } from '../storage/minio.service';
 import { scoreAiTell } from './ai-tell';
 import { FactSnapshot } from './application.types';
 import { buildCoverLetterMarkdown } from './cover-letter-render';
 import { CoverLetterService } from './cover-letter.service';
 import { CvApplicationEntity } from './entities/cv-application.entity';
+import { CvArtifactEntity } from './entities/cv-artifact.entity';
 import { CvSupplementEntity } from './entities/cv-supplement.entity';
 import { EntailService } from './entail.service';
 import { extractContactLines, extractH1Name } from './render-markdown';
@@ -34,6 +38,8 @@ export interface CoverLetterRequest {
   language?: string;
 }
 
+export type SupplementArtifactKind = 'pdf' | 'docx';
+
 export interface ScreeningRequest {
   questions?: string[];
   language?: string;
@@ -55,6 +61,8 @@ export class SupplementsService {
   constructor(
     @InjectRepository(CvSupplementEntity)
     private readonly supplements: Repository<CvSupplementEntity>,
+    @InjectRepository(CvArtifactEntity)
+    private readonly artifacts: Repository<CvArtifactEntity>,
     @InjectRepository(CvApplicationEntity)
     private readonly applications: Repository<CvApplicationEntity>,
     private readonly master: MasterCvService,
@@ -62,6 +70,9 @@ export class SupplementsService {
     private readonly coverLetter: CoverLetterService,
     private readonly screening: ScreeningService,
     private readonly entail: EntailService,
+    private readonly pdf: CvPdfService,
+    private readonly docx: CvDocxService,
+    private readonly storage: MinioService,
   ) {}
 
   async generateCoverLetter(
@@ -220,6 +231,47 @@ export class SupplementsService {
     }
 
     return supplement;
+  }
+
+  /**
+   * Exports one persisted supplement revision exactly once per format. A later call reuses the
+   * artifact row and bytes from MinIO; it never renders a replacement for an existing artifact.
+   */
+  async export(
+    userId: string,
+    applicationId: string,
+    kind: SupplementKind,
+    revisionNo: number,
+    artifactKind: SupplementArtifactKind,
+  ): Promise<{ content: Buffer; artifact: CvArtifactEntity }> {
+    const supplement = await this.get(userId, applicationId, kind, revisionNo);
+    const existing = await this.artifacts.findOne({
+      where: { supplementId: supplement.id, kind: artifactKind },
+    });
+    if (existing) {
+      return { content: await this.storage.getObject(existing.minioKey), artifact: existing };
+    }
+
+    const filenameBase = `${kind}-r${revisionNo}`;
+    const file = artifactKind === 'pdf'
+      ? await this.pdf.renderSupplement(supplement.content, filenameBase)
+      : await this.docx.renderSupplement(supplement.content, filenameBase);
+    const minioKey = `supplements/${userId}/${applicationId}/${filenameBase}.${artifactKind}`;
+    await this.storage.putObject(minioKey, file.content, file.mimeType);
+
+    const artifact = await this.artifacts.save({
+      renderId: null,
+      supplementId: supplement.id,
+      kind: artifactKind,
+      minioKey,
+      sha256: file.sha256,
+      byteSize: file.content.length,
+    } as CvArtifactEntity);
+
+    this.logger.log(
+      `stored ${artifactKind} supplement artifact for ${supplement.id} (${file.content.length} bytes)`,
+    );
+    return { content: file.content, artifact };
   }
 
   /**

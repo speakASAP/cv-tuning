@@ -4,17 +4,21 @@ import { ArtifactKind } from '../application.types';
 /**
  * A generated file in MinIO.
  *
- * `(renderId, kind)` is unique: approving twice must never produce a second PDF, and a
- * download must never be ambiguous about which file was approved.
+ * Exactly one of `renderId` and `supplementId` is set. Each source and kind has one artifact,
+ * so retries never produce a second file for the same material.
  */
 @Entity('cv_artifact')
 @Unique('uq_artifact_render_kind', ['renderId', 'kind'])
+@Unique('uq_artifact_supplement_kind', ['supplementId', 'kind'])
 export class CvArtifactEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'uuid' })
-  renderId!: string;
+  @Column({ type: 'uuid', nullable: true })
+  renderId!: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  supplementId!: string | null;
 
   @Column({ type: 'text' })
   kind!: ArtifactKind;
