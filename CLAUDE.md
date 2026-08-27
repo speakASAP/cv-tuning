@@ -229,6 +229,39 @@ free `cheap` and `smart` tiers are allowed; `premium` is blocked until the Phase
 Migrations run via `migrationsRun: true` at boot — there is **no standalone data-source**, so
 any scratch-DB check needs a direct `DataSource` script.
 
+**Supplements (Phase 6)** — cover letters and screening answers, `SupplementsService` +
+`cv_supplement`. The phase adds **no new grounding machinery**: `EntailService.validate()` is
+generic over "claims bound to facts", so a cover-letter paragraph and a screening answer are both
+a `DraftBullet` with a `sourceFactId` and get layer 2 unchanged. That service now has **three**
+callers — a change to its signature has three call sites, not one.
+
+The one genuinely new risk is that a letter is prose, and prose wants connective sentences no fact
+supports. Resolved by construction, not by exception: the salutation, the opening line naming the
+role and company, and the closing are **built in code** (`cover-letter-render.ts`) from the parsed
+job, so the "every model-authored sentence binds to exactly one fact" rule keeps no carve-out and
+the validator needs no "not a claim" verdict. If you find yourself adding such a verdict, the
+prompt has leaked greeting generation and the cover-letter rule 3 is being violated.
+
+Screening questions come from two sources kept **distinguishable on the row** (`questionSource`):
+one the user pasted from a real portal, one this service parsed from the posting. The user wins
+every tie, in the label as much as the text — presenting a guessed question as one the employer
+asked would have the user answer a question nobody posed, under their own name. Verdicts are
+re-attached to questions **by index**, never by `sourceFactId`, because two questions may
+legitimately cite the same fact. An unanswerable question is returned present-but-empty and
+rendered as explicitly unanswered; omitting it would leave the user to find the gap on the
+employer's form.
+
+Supplements have their **own document shape**: `renderToSupplementDocument`, not
+`renderToDocument`. The CV parser does not raise on letter markdown — it silently collapses the
+whole letter into `contact.parts`, which both writers render as one header blob. Both writers
+expose `renderSupplement()`; one model, two writers still holds.
+
+**Proof of work** — `cv_fact.kind = 'proof'` was a valid kind since Phase 1 and surfaced nowhere.
+`master/proof.ts` selects and formats it **deterministically, LLM-free**: a proof fact is a URL,
+and a model asked to include portfolio links will eventually reformat, truncate, or invent one.
+Because the text is reproduced verbatim, it needs no entailment pass. Order is first-appearance
+and is a contract — the render feeds a sha256 that spec §6.3 reuses as artifact identity.
+
 ## Constraints that are not obvious from the code
 
 - **No third-party users before Phase 7 (GDPR).** Phases 1–6 run on the owner's own CV data
