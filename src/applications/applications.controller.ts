@@ -14,6 +14,10 @@ import {
 import { Response } from 'express';
 import { CvAuthGuard, CvUser } from '../auth/cv-auth.guard';
 import { ApplicationsService } from './applications.service';
+import { SupplementsService } from './supplements.service';
+import { GenerateCoverLetterDto } from './dto/generate-cover-letter.dto';
+import { GenerateScreeningDto } from './dto/generate-screening.dto';
+import { SUPPLEMENT_KINDS, SupplementKind } from './supplement.types';
 import { ConfirmClaimDto } from './dto/confirm-claim.dto';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { MarkSentDto } from './dto/mark-sent.dto';
@@ -27,7 +31,9 @@ interface AuthedRequest {
 @Controller('api/applications')
 @UseGuards(CvAuthGuard)
 export class ApplicationsController {
-  constructor(private readonly applications: ApplicationsService) {}
+  constructor(private readonly applications: ApplicationsService,
+    private readonly supplements: SupplementsService,
+  ) {}
 
   @Post()
   async create(@Req() req: AuthedRequest, @Body() body: CreateApplicationDto) {
@@ -147,4 +153,67 @@ export class ApplicationsController {
     res.setHeader('content-length', String(artifact.byteSize));
     res.send(content);
   }
+
+  @Post(':id/cover-letter')
+  async generateCoverLetter(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: GenerateCoverLetterDto,
+  ) {
+    return this.supplements.generateCoverLetter(req.user.id, id, body);
+  }
+
+  @Post(':id/screening')
+  async generateScreening(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: GenerateScreeningDto,
+  ) {
+    return this.supplements.generateScreening(req.user.id, id, body);
+  }
+
+  @Get(':id/supplements')
+  async listSupplements(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.supplements.list(req.user.id, id);
+  }
+
+  @Get(':id/supplements/:kind/:revisionNo')
+  async getSupplement(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('kind') kind: string,
+    @Param('revisionNo') revisionNo: string,
+  ) {
+    return this.supplements.get(
+      req.user.id,
+      id,
+      assertSupplementKind(kind),
+      assertRevisionNo(revisionNo),
+    );
+  }
+}
+
+/**
+ * Validated BEFORE the lookup, and by hand rather than by `ParseIntPipe`.
+ *
+ * Recorded trap: `cv_application.id` is a uuid column, and a malformed path segment that
+ * reaches Postgres surfaces as a bare 500 — which callers classify as transient and RETRY,
+ * turning one bad request into a retry storm against the database. A malformed request must
+ * stay a permanent 4xx.
+ */
+function assertSupplementKind(kind: string): SupplementKind {
+  if (!(SUPPLEMENT_KINDS as readonly string[]).includes(kind)) {
+    throw new BadRequestException(
+      `unknown supplement kind "${kind}"; expected one of ${SUPPLEMENT_KINDS.join(', ')}`,
+    );
+  }
+  return kind as SupplementKind;
+}
+
+function assertRevisionNo(value: string): number {
+  // `ParseIntPipe` accepts "1.5" and "1e3". A revision is a positive integer or it is a 400.
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new BadRequestException(`revision must be a positive integer, got "${value}"`);
+  }
+  return Number(value);
 }

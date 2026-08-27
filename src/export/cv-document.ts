@@ -166,3 +166,91 @@ export function renderToDocument(markdown: string): CvDocument {
 
   return { contact: { name, parts: contactParts }, sections };
 }
+
+/**
+ * The second document shape: a titled block of prose, plus an optional question/answer list.
+ *
+ * A cover letter and a set of screening answers are NOT CVs — they have no entries, no
+ * employers, and no periods — so forcing them through `CvDocument` would either lose their
+ * structure or corrupt the CV model with fields only supplements use. Parsing a letter through
+ * `renderToDocument` does not raise; it silently collapses the entire letter into
+ * `contact.parts`, which both writers would then render as one header blob. A separate,
+ * explicit shape is what stops that from shipping.
+ *
+ * ONE MODEL, TWO WRITERS remains the rule: `cv-pdf.service.ts` and `cv-docx.service.ts` both
+ * render this same structure, and neither may grow a field the other lacks.
+ */
+export interface SupplementBlock {
+  /** A question, for screening answers. Null for a cover letter's plain body run. */
+  heading: string | null;
+  paragraphs: string[];
+}
+
+export interface SupplementDocument {
+  title: string;
+  /** The candidate's contact line, when the source document carried one. */
+  contactParts: string[];
+  blocks: SupplementBlock[];
+}
+
+/**
+ * Parses supplement markdown (H1 title, optional contact line, `## ` per question, plain
+ * paragraphs) into `SupplementDocument`.
+ *
+ * Deliberately separate from `renderToDocument` rather than a mode flag on it: the CV parser's
+ * rules — an em-dash entry heading, bullets attaching to the most recent entry — have no
+ * meaning here, and a shared function with two behaviours is how the two shapes would
+ * eventually leak into each other.
+ */
+export function renderToSupplementDocument(markdown: string): SupplementDocument {
+  const lines = markdown.split('\n').map((line) => line.trim());
+
+  let title = '';
+  const contactParts: string[] = [];
+  const blocks: SupplementBlock[] = [];
+  let current: SupplementBlock | null = null;
+  let seenTitle = false;
+
+  for (const line of lines) {
+    if (!line) continue;
+
+    const h1 = /^#\s+(.+)$/.exec(line);
+    if (h1 && !seenTitle) {
+      title = h1[1].trim();
+      seenTitle = true;
+      continue;
+    }
+
+    const h2 = /^##\s+(.+)$/.exec(line);
+    if (h2) {
+      current = { heading: h2[1].trim(), paragraphs: [] };
+      blocks.push(current);
+      continue;
+    }
+
+    // Before the first heading and after the title, a line is contact detail — the same
+    // position `cv-document.ts` reads it from in a CV, so the two documents in one application
+    // carry an identical header.
+    if (!current && seenTitle && contactParts.length === 0 && line.includes('@')) {
+      contactParts.push(...line.split('|').map((part) => part.trim()).filter(Boolean));
+      continue;
+    }
+
+    if (!current) {
+      // A cover letter has no `## ` at all: its body is one unheaded block.
+      current = { heading: null, paragraphs: [] };
+      blocks.push(current);
+    }
+
+    current.paragraphs.push(line);
+  }
+
+  if (!title) {
+    // Every supplement this codebase builds starts with an H1. A missing one means the
+    // document was assembled by something else, and rendering it would produce an untitled
+    // file the user cannot identify among their downloads.
+    throw new Error('supplement markdown has no "# Title" heading; refusing to render it');
+  }
+
+  return { title, contactParts, blocks };
+}

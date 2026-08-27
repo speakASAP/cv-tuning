@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import AdmZip = require('adm-zip');
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
-import { CvDocument, renderToDocument } from './cv-document';
+import {
+  CvDocument,
+  SupplementDocument,
+  renderToDocument,
+  renderToSupplementDocument,
+} from './cv-document';
 import { RenderedFile } from './cv-pdf.service';
 
 const EPOCH_W3CDTF = '1970-01-01T00:00:00.000Z';
@@ -112,4 +117,50 @@ export class CvDocxService {
 
     return out;
   }
+
+  /**
+   * The supplement counterpart of `render`. ONE MODEL, TWO WRITERS: this renders the same
+   * `SupplementDocument` the PDF writer does, and neither may grow a field the other lacks.
+   */
+  async renderSupplement(markdown: string, filenameBase: string): Promise<RenderedFile> {
+    const document = renderToSupplementDocument(markdown);
+    const raw = await Packer.toBuffer(
+      new Document({ sections: [{ children: this.supplementParagraphs(document) }] }),
+    );
+    const content = this.pinTimestamps(raw);
+
+    return {
+      content,
+      sha256: createHash('sha256').update(content).digest('hex'),
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      filename: `${filenameBase}.docx`,
+    };
+  }
+
+  private supplementParagraphs(document: SupplementDocument): Paragraph[] {
+    const out: Paragraph[] = [
+      new Paragraph({ text: document.title, heading: HeadingLevel.TITLE }),
+    ];
+
+    if (document.contactParts.length > 0) {
+      out.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          children: [new TextRun({ text: document.contactParts.join('  ·  '), size: 20 })],
+        }),
+      );
+    }
+
+    for (const block of document.blocks) {
+      if (block.heading) {
+        out.push(new Paragraph({ text: block.heading, heading: HeadingLevel.HEADING_1 }));
+      }
+      for (const paragraph of block.paragraphs) {
+        out.push(new Paragraph({ text: paragraph }));
+      }
+    }
+
+    return out;
+  }
+
 }

@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import PDFDocument = require('pdfkit');
-import { CvDocument, renderToDocument } from './cv-document';
+import {
+  CvDocument,
+  SupplementDocument,
+  renderToDocument,
+  renderToSupplementDocument,
+} from './cv-document';
 
 export interface RenderedFile {
   content: Buffer;
@@ -155,4 +160,86 @@ export class CvPdfService {
       }
     }
   }
+
+  /**
+   * Renders a supplement (cover letter or screening answers) rather than a CV.
+   *
+   * Same pinned `CreationDate`, same WinAnsi pre-check, same sha256 contract — a supplement's
+   * artifact identity is its hash exactly as a CV's is (spec §6.3), so an unpinned timestamp
+   * would break idempotency here for the same reason it did there.
+   */
+  async renderSupplement(markdown: string, filenameBase: string): Promise<RenderedFile> {
+    const document = renderToSupplementDocument(markdown);
+    this.assertSupplementEncodable(document);
+
+    const content = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50,
+        info: { Title: document.title, Author: document.title, CreationDate: new Date(0) },
+      });
+      const chunks: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      this.writeSupplement(doc, document);
+      doc.end();
+    });
+
+    return {
+      content,
+      sha256: createHash('sha256').update(content).digest('hex'),
+      mimeType: 'application/pdf',
+      filename: `${filenameBase}.pdf`,
+    };
+  }
+
+  /** Same rule and same message as `assertEncodable`, over the supplement's own strings. */
+  private assertSupplementEncodable(document: SupplementDocument): void {
+    const strings = [
+      document.title,
+      ...document.contactParts,
+      ...document.blocks.flatMap((block) => [block.heading ?? '', ...block.paragraphs]),
+    ];
+
+    const unsupported = new Set<string>();
+    for (const value of strings) {
+      for (const char of value) {
+        const codePoint = char.codePointAt(0);
+        if (codePoint !== undefined && !WIN_ANSI_CODE_POINTS.has(codePoint)) {
+          unsupported.add(char);
+        }
+      }
+    }
+
+    if (unsupported.size > 0) {
+      const chars = [...unsupported].join(', ');
+      throw new Error(
+        `PDF export does not yet support these characters (${chars}); export DOCX instead, ` +
+          'which renders them correctly.',
+      );
+    }
+  }
+
+  private writeSupplement(doc: PDFKit.PDFDocument, document: SupplementDocument): void {
+    doc.fontSize(20).font('Helvetica-Bold').text(document.title);
+    if (document.contactParts.length > 0) {
+      doc.moveDown(0.3).fontSize(10).font('Helvetica').text(document.contactParts.join('  ·  '));
+    }
+
+    for (const block of document.blocks) {
+      if (block.heading) {
+        doc.moveDown(1).fontSize(12).font('Helvetica-Bold').text(block.heading);
+        doc.moveDown(0.3);
+      } else {
+        doc.moveDown(0.8);
+      }
+      for (const paragraph of block.paragraphs) {
+        doc.fontSize(10).font('Helvetica').text(paragraph);
+        doc.moveDown(0.4);
+      }
+    }
+  }
+
 }
