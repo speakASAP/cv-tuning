@@ -282,4 +282,30 @@ and is a contract — the render feeds a sha256 that spec §6.3 reuses as artifa
 - **Consent evidence:** `ConsentService` stores the published CV-processing notice version and
   timestamp on `cv_profile`. `GET/POST /api/master/consent` are authenticated and derive the
   user id from `CvAuthGuard`; repeated grants for the same version preserve the original
-  evidence timestamp. Consent enforcement on processing routes remains a subsequent Phase 7 gate.
+  evidence timestamp. **Consent is now ENFORCED:** `ConsentGuard` (`src/master/consent.guard.ts`,
+  exported by `MasterModule`) gates CV-processing routes on *current* consent — the stored version
+  must equal `CV_CONSENT_VERSION`, so re-publishing the notice re-gates every processing route. It
+  is applied at method level (after the controller-level `CvAuthGuard`, whose `req.user` it reads)
+  to: master save & imports, `POST /api/jobs/:id/score`, and application
+  create/regenerate/revise/confirm-claim/approve/retry-export/cover-letter/screening. Read-only
+  routes and the `/api/privacy` data-subject-rights routes are deliberately NOT gated — a user who
+  withdrew consent must still read, export, and delete.
+- **GDPR data-subject rights (`src/privacy/`, spec §9):** `GET /api/privacy/export` returns the full
+  graph (profile, masters, fact graph, jobs, applications, renders, supplements, chats, artifact
+  refs + base64 bytes; an unreadable object is reported per-artifact, never silently dropped).
+  `DELETE /api/privacy/account` is the `user_id → cv_* → MinIO` hard-delete cascade. **Ordering is
+  load-bearing:** MinIO objects are deleted and VERIFIED gone (`MinioService.deleteObject` = DELETE
+  then a HEAD that must 404) BEFORE any row is removed, because a row deleted while its object
+  lingers is an unreferenced orphan (unrecoverable) whereas the reverse is a retryable
+  orphan-with-reference; row deletes then run in one transaction. `POST /api/privacy/retention`
+  expires `cv_job.raw_text` past `expires_at` (keeping derived `parsed`) and purges orphaned
+  artifacts object-before-row. No new migration — every column already existed. No scheduler here
+  (timing belongs to BPCP/ops); the endpoints are the trigger seam.
+- **Offboarding reconciliation is BLOCKED, by design.** `OffboardingService.reconcile()`
+  (`POST /api/privacy/reconcile`) would purge `cv_profile`s whose auth account is gone, but
+  auth-microservice emits no offboarding events and exposes no user-existence API. The check goes
+  through `IdentityProviderPort` behind the `AUTH_USER_LOOKUP_URL` seam; unconfigured, it reports
+  `blocked` and purges nothing, and it only ever deletes on a positively CONFIRMED-gone (404)
+  signal — an auth outage (null/unresolved) never triggers a delete. Do not invent an auth
+  endpoint; unblock only when auth grows a real one. Sub-processor list: `docs/privacy/subprocessors.md`
+  (DPA links are `[MISSING: ...]` placeholders until an authoritative source provides them).

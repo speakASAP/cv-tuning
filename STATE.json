@@ -4,7 +4,7 @@
   "updated": "2026-08-27",
   "branch": "main",
   "lastCommit": "26ffe25",
-  "gate": "No third-party users before Phase 7 (GDPR). Phases 1-6 run on owner's own CV data only.",
+  "gate": "Phase 7 (GDPR) core landed: consent enforcement, export, hard-delete cascade, retention. Third-party users are now gated on current consent; offboarding reconciliation is blocked pending an auth user-listing API.",
   "models": "Free tiers only (cheap|smart) until Phase 8 benchmark. premium is BLOCKED.",
   "phases": {
     "0": {
@@ -37,8 +37,8 @@
       "what": "Cover letters, screening answers, proof-of-work surfacing"
     },
     "7": {
-      "status": "next",
-      "what": "GDPR: pseudonymization, consent, delete-cascade, export, retention"
+      "status": "done",
+      "what": "GDPR: pseudonymization, consent + enforcement, delete-cascade, export, retention; offboarding reconciliation seam (blocked pending auth list API)"
     },
     "8": {
       "status": "todo",
@@ -54,9 +54,9 @@
     }
   },
   "tests": {
-    "suites": 54,
-    "cases": 680,
-    "passed": 669,
+    "suites": 63,
+    "cases": 719,
+    "passed": 708,
     "skipped": 11,
     "command": "npm test",
     "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
@@ -83,7 +83,11 @@
     "Phase 6 by decision, not oversight: supplements are NOT in the approval gate. `approve` guards the CV artifact the user is accountable for, and widening it would let a cover-letter verdict block a CV export.",
     "SUPPLEMENT EXPORT RESOLVED 2026-08-27. Supplement PDF/DOCX artifacts are rendered once, stored in MinIO, linked through cv_artifact.supplementId, and served by the authenticated download route without replacing existing artifact rows.",
     "PHASE 7 FOUNDATION RESOLVED 2026-08-27. All outbound AI prompts pass through src/ai/pseudonymize.ts, which redacts direct contact identifiers before the shared ai-microservice boundary; local rendering retains the original contact data.",
-    "PHASE 7 CONSENT FOUNDATION RESOLVED 2026-08-27. ConsentService records the separately versioned CV-processing notice and consent timestamp on cv_profile, exposes authenticated GET/POST /api/master/consent, and keeps repeat grants for the same version idempotent."
+    "PHASE 7 CONSENT FOUNDATION RESOLVED 2026-08-27. ConsentService records the separately versioned CV-processing notice and consent timestamp on cv_profile, exposes authenticated GET/POST /api/master/consent, and keeps repeat grants for the same version idempotent.",
+    "PHASE 7 GDPR CORE RESOLVED 2026-08-27. ConsentGuard (src/master/consent.guard.ts) gates CV-processing routes on CURRENT consent (stored version must equal CV_CONSENT_VERSION), applied at method level to master save/imports, job score, and application create/regenerate/revise/confirm-claim/approve/retry-export/cover-letter/screening; it runs AFTER the controller-level CvAuthGuard and reads req.user. Read-only and data-subject-rights routes are deliberately NOT gated. New src/privacy module: GET /api/privacy/export (full graph + artifact bytes/refs), DELETE /api/privacy/account (verified-MinIO-then-transactional-DB hard-delete cascade), POST /api/privacy/retention (expire cv_job.rawText past expiresAt keeping parsed; purge orphaned artifacts), POST /api/privacy/reconcile (offboarding). MinioService gained deleteObject (DELETE then HEAD-verify) and objectExists. No migration — every column already existed.",
+    "PHASE 7 OFFBOARDING BLOCKED 2026-08-27 (not an oversight). Offboarding reconciliation (OffboardingService.reconcile) is implemented but BLOCKED at runtime: auth-microservice emits no offboarding events AND exposes no user-listing/existence API, so there is no authoritative 'this account is gone' signal. The check goes through IdentityProviderPort (src/privacy/identity-provider.ts) behind the AUTH_USER_LOOKUP_URL seam; with no lookup configured reconcile() returns {status:'blocked'} and purges nothing. It NEVER deletes on an unresolved/null lookup — only a positively CONFIRMED-gone (404) account is purged — so an auth outage cannot cascade into deleting a live user's data. Unblocks only when auth grows a user-existence endpoint. Do not fabricate one.",
+    "PHASE 7 DELETE/RETENTION ORDERING is load-bearing: the MinIO object is deleted and VERIFIED gone (MinioService.deleteObject does DELETE then a HEAD that must 404) BEFORE the DB row that references it. A row deleted while its object lingers is an unreferenced orphan (unrecoverable); an object deleted while its row lingers is recovered by re-running the idempotent cascade. The hard-delete cascade and purgeOrphanedArtifacts both follow object-before-row; do not reorder them.",
+    "PHASE 7 published sub-processor list is docs/privacy/subprocessors.md (OpenRouter, Google, Anthropic, self-hosted MinIO from spec §9). DPA URLs are [MISSING: authoritative DPA URL] placeholders on purpose — a guessed DPA link is a compliance claim the project cannot stand behind. Replace only from an authoritative source."
   ],
   "traps": [
     "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",
