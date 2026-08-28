@@ -47,6 +47,24 @@ correctly refuse the completion (spec §8.1). That's the anti-fabrication guard 
 intended, not an eval-harness bug, but it means the baseline is still blocked on an
 ai-microservice fix (see `STATE.json.openItems`).
 
+The **Phase 8 tier benchmark** (`benchmark-run.ts`) is a separate, also non-CI harness —
+not an extension of the grounding eval above. It runs the same tailoring+entailment
+workload across `cheap`/`smart`/`premium` on five real, externally-supplied CVs (spec
+§8.2), never on the synthetic fixtures `run-eval.ts` uses:
+
+```bash
+rtk npx ts-node src/applications/__evals__/benchmark-run.ts
+# needs CV_AI_SERVICE_URL, CV_AI_JWT_SECRET, CV_BENCHMARK_FIXTURES_DIR (5 fixture JSON
+# files, never committed); CV_BENCHMARK_PREMIUM_MODELS is optional and premium is
+# reported "skipped" without it. Full fixture format, consent requirement, and output
+# handling: docs/evals/2026-08-28-phase-8-benchmark.md
+```
+
+Infrastructure only as of 2026-08-28 — no run has been executed. It uses its own
+`BenchmarkTier`/`BenchmarkAiClientService` (`benchmark-client.ts`), not production
+`AiTier`/`AiClientService`, specifically so `premium` never becomes reachable from
+production code (STATE.json: "premium is BLOCKED").
+
 ## Architecture
 
 NestJS + TypeORM + Postgres on port 3379. Four domain modules pipeline into each other:

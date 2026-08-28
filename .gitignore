@@ -6,3 +6,7 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+# Phase 8 tier benchmark output (docs/evals/2026-08-28-phase-8-benchmark.md): contains
+# tailored bullet text derived from real, consented CVs and must never be committed.
+benchmark-output/

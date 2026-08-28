@@ -1,7 +1,7 @@
 {
   "service": "cv-tuning",
   "port": 3379,
-  "updated": "2026-08-27",
+  "updated": "2026-08-28",
   "branch": "main",
   "lastCommit": "26ffe25",
   "gate": "Phase 7 (GDPR) core landed: consent enforcement, export, hard-delete cascade, retention. Third-party users are now gated on current consent; offboarding reconciliation is blocked pending an auth user-listing API.",
@@ -42,7 +42,7 @@
     },
     "8": {
       "status": "todo",
-      "what": "Model benchmark across tiers; gates premium and all pricing"
+      "what": "Model benchmark across tiers; gates premium and all pricing. Infra prepared 2026-08-28 (benchmark-run.ts + docs/evals/2026-08-28-phase-8-benchmark.md); no run executed yet -- needs five consented real CVs and, for the premium column, an ai-microservice deployment that actually serves it."
     },
     "9": {
       "status": "todo",
@@ -87,7 +87,8 @@
     "PHASE 7 GDPR CORE RESOLVED 2026-08-27. ConsentGuard (src/master/consent.guard.ts) gates CV-processing routes on CURRENT consent (stored version must equal CV_CONSENT_VERSION), applied at method level to master save/imports, job score, and application create/regenerate/revise/confirm-claim/approve/retry-export/cover-letter/screening; it runs AFTER the controller-level CvAuthGuard and reads req.user. Read-only and data-subject-rights routes are deliberately NOT gated. New src/privacy module: GET /api/privacy/export (full graph + artifact bytes/refs), DELETE /api/privacy/account (verified-MinIO-then-transactional-DB hard-delete cascade), POST /api/privacy/retention (expire cv_job.rawText past expiresAt keeping parsed; purge orphaned artifacts), POST /api/privacy/reconcile (offboarding). MinioService gained deleteObject (DELETE then HEAD-verify) and objectExists. No migration — every column already existed.",
     "PHASE 7 OFFBOARDING BLOCKED 2026-08-27 (not an oversight). Offboarding reconciliation (OffboardingService.reconcile) is implemented but BLOCKED at runtime: auth-microservice emits no offboarding events AND exposes no user-listing/existence API, so there is no authoritative 'this account is gone' signal. The check goes through IdentityProviderPort (src/privacy/identity-provider.ts) behind the AUTH_USER_LOOKUP_URL seam; with no lookup configured reconcile() returns {status:'blocked'} and purges nothing. It NEVER deletes on an unresolved/null lookup — only a positively CONFIRMED-gone (404) account is purged — so an auth outage cannot cascade into deleting a live user's data. Unblocks only when auth grows a user-existence endpoint. Do not fabricate one.",
     "PHASE 7 DELETE/RETENTION ORDERING is load-bearing: the MinIO object is deleted and VERIFIED gone (MinioService.deleteObject does DELETE then a HEAD that must 404) BEFORE the DB row that references it. A row deleted while its object lingers is an unreferenced orphan (unrecoverable); an object deleted while its row lingers is recovered by re-running the idempotent cascade. The hard-delete cascade and purgeOrphanedArtifacts both follow object-before-row; do not reorder them.",
-    "PHASE 7 published sub-processor list is docs/privacy/subprocessors.md (OpenRouter, Google, Anthropic, self-hosted MinIO from spec §9). DPA URLs are [MISSING: authoritative DPA URL] placeholders on purpose — a guessed DPA link is a compliance claim the project cannot stand behind. Replace only from an authoritative source."
+    "PHASE 7 published sub-processor list is docs/privacy/subprocessors.md (OpenRouter, Google, Anthropic, self-hosted MinIO from spec §9). DPA URLs are [MISSING: authoritative DPA URL] placeholders on purpose — a guessed DPA link is a compliance claim the project cannot stand behind. Replace only from an authoritative source.",
+    "PHASE 8 BENCHMARK INFRA PREPARED 2026-08-28 (not yet executed): src/applications/__evals__/benchmark-run.ts runs the same tailoring+entailment workload across cheap/smart/premium over five external fixture JSON files supplied at runtime via CV_BENCHMARK_FIXTURES_DIR (never committed). premium uses a dedicated BenchmarkTier/BenchmarkAiClientService (benchmark-client.ts), NOT production AiTier -- AiClientService/TailorService/EntailService are unchanged. premium runs report skipped unless CV_BENCHMARK_PREMIUM_MODELS is set to a real deployment id; there is no way for the script to detect upstream premium support automatically. Output (JSON + Markdown) goes to ./benchmark-output/ (gitignored) because it contains tailored text from real CVs. See docs/evals/2026-08-28-phase-8-benchmark.md for the fixture format, consent precondition, and exact command. Next action to actually run Phase 8: obtain five consented real CVs and convert them to the fixture format."
   ],
   "traps": [
     "db-server-postgres Service has no selector: kubectl port-forward svc/... fails. Use kubectl exec into the cv-tuning pod.",
