@@ -3,6 +3,8 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 export const IDENTITY_PROVIDER = 'CV_IDENTITY_PROVIDER';
 export const AUTH_USER_LOOKUP_URL = 'CV_AUTH_USER_LOOKUP_URL';
 export const IDP_FETCH = 'CV_IDP_FETCH';
+export const AUTH_USER_LOOKUP_TOKEN = 'CV_AUTH_USER_LOOKUP_TOKEN';
+export const AUTH_USER_LOOKUP_SERVICE_NAME = 'CV_AUTH_USER_LOOKUP_SERVICE_NAME';
 
 const LOOKUP_TIMEOUT_MS = 3000;
 
@@ -42,6 +44,8 @@ export class HttpIdentityProvider implements IdentityProviderPort {
 
   constructor(
     @Optional() @Inject(AUTH_USER_LOOKUP_URL) private readonly lookupUrl: string | null = null,
+    @Optional() @Inject(AUTH_USER_LOOKUP_TOKEN) private readonly lookupToken: string | null = null,
+    @Optional() @Inject(AUTH_USER_LOOKUP_SERVICE_NAME) private readonly serviceName = 'cv-tuning',
     @Optional() @Inject(IDP_FETCH) private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
@@ -61,6 +65,10 @@ export class HttpIdentityProvider implements IdentityProviderPort {
     try {
       response = await this.fetchImpl(`${this.lookupUrl}/${encodeURIComponent(userId)}`, {
         method: 'GET',
+        headers: {
+          ...(this.lookupToken ? { 'x-internal-service-token': this.lookupToken } : {}),
+          'x-service-name': this.serviceName,
+        },
         signal: controller.signal,
       });
     } catch (cause) {
