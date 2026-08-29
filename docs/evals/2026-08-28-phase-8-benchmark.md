@@ -31,13 +31,17 @@ one-time cost/quality question. The two never share fixtures and must not be con
 ```bash
 CV_AI_SERVICE_URL=http://<ai-microservice clusterIP>:3380 \
 CV_AI_JWT_SECRET=<matches ai-microservice's JWT_SECRET> \
+CV_AI_JWT_PRIVATE_KEY=<PEM private key for RS256, optional when JWT_SECRET is available> \
 CV_BENCHMARK_FIXTURES_DIR=/absolute/path/outside/this/repo/five-consented-cvs \
 CV_BENCHMARK_PREMIUM_MODELS=anthropic/claude-sonnet-4-6 \
 rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 ```
 
 - `CV_AI_SERVICE_URL` / `CV_AI_JWT_SECRET` — same contract as `run-eval.ts`: a reachable
-  ai-microservice and the shared JWT secret it verifies service tokens against.
+  ai-microservice and the secret it verifies HS256 service tokens against.
+- `CV_AI_JWT_PRIVATE_KEY` — optional RS256 signing key. When present, the benchmark client
+  signs RS256 tokens and matches the live ai-microservice contract, which verifies JWT_PUBLIC_KEY
+  first and only falls back to HS256 while the migration window is open.
 - `CV_BENCHMARK_FIXTURES_DIR` — **required.** A directory containing exactly five fixture
   `*.json` files (format below). The loader (`benchmark-fixtures.ts`) refuses any other
   count — a partial run is not the measurement spec §8.2 asks for.

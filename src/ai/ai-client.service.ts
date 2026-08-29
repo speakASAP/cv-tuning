@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { createHmac } from 'crypto';
+import { createHmac, createSign } from 'crypto';
 import { pseudonymizePrompt } from './pseudonymize';
 
 export const AI_FETCH = 'CV_AI_FETCH';
 export const AI_SERVICE_URL = 'CV_AI_SERVICE_URL';
 export const AI_JWT_SECRET = 'CV_AI_JWT_SECRET';
+export const AI_JWT_PRIVATE_KEY = 'CV_AI_JWT_PRIVATE_KEY';
 
 export type AiTier = 'cheap' | 'smart';
 
@@ -63,8 +64,9 @@ export class AiClientService {
 
   constructor(
     @Optional() @Inject(AI_SERVICE_URL) private readonly aiServiceUrl: string = process.env.AI_SERVICE_URL ?? '',
-    @Optional() @Inject(AI_JWT_SECRET) private readonly jwtSecret: string = process.env.JWT_SECRET ?? '',
+    @Optional() @Inject(AI_JWT_SECRET) private readonly jwtSecret: string = process.env.CV_AI_JWT_SECRET ?? process.env.JWT_SECRET ?? '',
     @Optional() @Inject(AI_FETCH) private readonly fetchImpl: typeof fetch = fetch,
+    @Optional() @Inject(AI_JWT_PRIVATE_KEY) private readonly jwtPrivateKey: string = process.env.CV_AI_JWT_PRIVATE_KEY ?? process.env.JWT_PRIVATE_KEY ?? '',
   ) {}
 
   async complete(input: AiCompletionRequest): Promise<AiCompletion> {
@@ -171,8 +173,20 @@ export class AiClientService {
   }
 
   private mintServiceToken(): string {
+    if (this.jwtPrivateKey) {
+      const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+      const now = Math.floor(Date.now() / 1000);
+      const payload = base64url(
+        JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
+      );
+      const signature = base64url(
+        createSign('RSA-SHA256').update(`${header}.${payload}`).sign(this.jwtPrivateKey),
+      );
+      return `${header}.${payload}.${signature}`;
+    }
+
     if (!this.jwtSecret) {
-      throw new Error('JWT_SECRET is not set; cannot authenticate to ai-microservice');
+      throw new Error('JWT_SECRET or JWT_PRIVATE_KEY is not set; cannot authenticate to ai-microservice');
     }
 
     const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));

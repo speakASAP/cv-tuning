@@ -20,7 +20,7 @@
  * measured. If `mintServiceToken`'s HMAC scheme in `ai-client.service.ts` ever changes,
  * update the copy below too.
  */
-import { createHmac } from 'crypto';
+import { createHmac, createSign } from 'crypto';
 import { pseudonymizePrompt } from '../../ai/pseudonymize';
 
 export type BenchmarkTier = 'cheap' | 'smart' | 'premium';
@@ -60,6 +60,7 @@ export interface BenchmarkCompletionRequest {
   maxTokens?: number;
   correlationId?: string;
   timeoutMs?: number;
+  humanApproval?: boolean;
 }
 
 export interface BenchmarkCompletion {
@@ -96,7 +97,8 @@ export class PremiumNotConfiguredError extends Error {
 
 export interface BenchmarkAiClientOptions {
   aiServiceUrl: string;
-  jwtSecret: string;
+  jwtSecret?: string;
+  jwtPrivateKey?: string;
   fetchImpl?: typeof fetch;
   /**
    * Comma-separated model ids expected to serve `premium`, e.g.
@@ -111,10 +113,12 @@ export class BenchmarkAiClientService {
   private readonly jwtSecret: string;
   private readonly fetchImpl: typeof fetch;
   private readonly premiumModels: readonly string[];
+  private readonly jwtPrivateKey: string;
 
   constructor(options: BenchmarkAiClientOptions) {
     this.aiServiceUrl = options.aiServiceUrl;
-    this.jwtSecret = options.jwtSecret;
+    this.jwtSecret = options.jwtSecret ?? '';
+    this.jwtPrivateKey = options.jwtPrivateKey ?? '';
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.premiumModels = options.premiumModels ?? [];
   }
@@ -155,6 +159,7 @@ export class BenchmarkAiClientService {
           output_schema: input.outputSchema,
           max_tokens: input.maxTokens ?? 8000,
           correlation_id: input.correlationId,
+          human_approval: input.tier === 'premium' ? (input.humanApproval ?? true) : undefined,
         }),
       });
     } catch (cause) {
@@ -218,8 +223,20 @@ export class BenchmarkAiClientService {
   }
 
   private mintServiceToken(): string {
+    if (this.jwtPrivateKey) {
+      const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+      const now = Math.floor(Date.now() / 1000);
+      const payload = base64url(
+        JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
+      );
+      const signature = base64url(
+        createSign('RSA-SHA256').update(`${header}.${payload}`).sign(this.jwtPrivateKey),
+      );
+      return `${header}.${payload}.${signature}`;
+    }
+
     if (!this.jwtSecret) {
-      throw new Error('CV_AI_JWT_SECRET is not set; cannot authenticate to ai-microservice');
+      throw new Error('CV_AI_JWT_SECRET or CV_AI_JWT_PRIVATE_KEY is not set; cannot authenticate to ai-microservice');
     }
 
     const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
