@@ -33,7 +33,8 @@ CV_AI_SERVICE_URL=http://<ai-microservice clusterIP>:3380 \
 CV_AI_JWT_SECRET=<matches ai-microservice's JWT_SECRET> \
 CV_AI_JWT_PRIVATE_KEY=<PEM private key for RS256, optional when JWT_SECRET is available> \
 CV_BENCHMARK_FIXTURES_DIR=/absolute/path/outside/this/repo/five-consented-cvs \
-CV_BENCHMARK_PREMIUM_MODELS=anthropic/claude-sonnet-4-6 \
+CV_BENCHMARK_PREMIUM_MODELS=openrouter/anthropic/claude-sonnet-4.6 \
+CV_BENCHMARK_PREMIUM_HUMAN_APPROVED=true \
 rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 ```
 
@@ -46,10 +47,11 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
   `*.json` files (format below). The loader (`benchmark-fixtures.ts`) refuses any other
   count — a partial run is not the measurement spec §8.2 asks for.
 - `CV_BENCHMARK_PREMIUM_MODELS` — **optional.** Comma-separated model id(s) upstream will
-  actually serve `premium` with (e.g. `anthropic/claude-sonnet-4-6`, per spec §8's table).
+  actually serve `premium` with (e.g. `openrouter/anthropic/claude-sonnet-4.6`, matching the LiteLLM route).
   Omit it and every `premium` run is recorded as `skipped`, not faked or silently dropped —
   "upstream supports it" is not something this script can discover on its own short of a
   live LiteLLM deployment probe, so it is configuration, not detection.
+- `CV_BENCHMARK_PREMIUM_HUMAN_APPROVED` — must be exactly `true` for a premium request. Set it only for the explicitly approved run; the runner sends that approval on each premium call and never defaults it.
 - `CV_BENCHMARK_TIERS` — optional override, comma-separated subset of `cheap,smart,premium`
   (default: all three).
 - `CV_BENCHMARK_OUTPUT_DIR` — optional, default `./benchmark-output` (gitignored — see

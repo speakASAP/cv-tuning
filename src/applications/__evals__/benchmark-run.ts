@@ -132,6 +132,7 @@ async function runFixtureOnTier(
   fixture: BenchmarkFixture,
   tier: BenchmarkTier,
   ai: BenchmarkAiClientService,
+  premiumHumanApproved: boolean,
 ): Promise<BenchmarkRunResult> {
   const empty: BenchmarkRunResult = {
     fixture: fixture.label,
@@ -172,6 +173,7 @@ async function runFixtureOnTier(
         styleExemplars: fixture.styleExemplars,
       }),
       outputSchema: TAILOR_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+      humanApproval: tier === 'premium' ? premiumHumanApproved : undefined,
     });
 
     if (tailorCompletion.degraded) {
@@ -205,6 +207,7 @@ async function runFixtureOnTier(
         bullets.map((b) => ({ text: b.text, sourceFactText: factsById.get(b.sourceFactId)?.text ?? '' })),
       ),
       outputSchema: ENTAIL_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+      humanApproval: tier === 'premium' ? premiumHumanApproved : undefined,
     });
 
     const totalLatencyMs = tailorCompletion.latencyMs + entailCompletion.latencyMs;
@@ -283,6 +286,7 @@ async function main(): Promise<void> {
     .filter(Boolean);
 
   const tiers = parseTierList(process.env.CV_BENCHMARK_TIERS);
+  const premiumHumanApproved = process.env.CV_BENCHMARK_PREMIUM_HUMAN_APPROVED === 'true';
   const outputDir = process.env.CV_BENCHMARK_OUTPUT_DIR ?? './benchmark-output';
 
   const fixtures = loadBenchmarkFixtures(fixturesDir);
@@ -300,7 +304,7 @@ async function main(): Promise<void> {
       // eslint-disable-next-line no-await-in-loop -- sequential on purpose: rate limits and
       // per-tier LiteLLM timeouts are tuned around one in-flight CV call at a time (see the
       // 2026-08-24 baseline doc); parallelising would invalidate the latency comparison anyway.
-      results.push(await runFixtureOnTier(fixture, tier, ai));
+      results.push(await runFixtureOnTier(fixture, tier, ai, premiumHumanApproved));
     }
   }
 

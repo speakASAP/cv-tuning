@@ -159,7 +159,7 @@ export class BenchmarkAiClientService {
           output_schema: input.outputSchema,
           max_tokens: input.maxTokens ?? 8000,
           correlation_id: input.correlationId,
-          human_approval: input.tier === 'premium' ? (input.humanApproval ?? true) : undefined,
+          human_approval: input.tier === 'premium' ? input.humanApproval : undefined,
         }),
       });
     } catch (cause) {
