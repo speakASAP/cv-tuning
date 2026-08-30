@@ -6,6 +6,33 @@ type Tab = 'workspace' | 'applications' | 'dashboard';
 type Row = Record<string, unknown>;
 type ApiError = Error & { status?: number };
 const TOKEN_KEY = 'cv_tuning_access_token';
+const AUTH_STATE_PREFIX = 'cv_tuning_auth_state:';
+const AUTH_ORIGIN = 'https://auth.alfares.cz';
+
+function captureHostedAuthToken(): string {
+  const url = new URL(window.location.href);
+  if (url.pathname !== '/auth/callback') return sessionStorage.getItem(TOKEN_KEY) ?? '';
+  const params = new URLSearchParams(url.hash.slice(1));
+  const state = params.get('state');
+  const token = params.get('access_token');
+  const expected = state ? sessionStorage.getItem(AUTH_STATE_PREFIX + state) : null;
+  if (state) sessionStorage.removeItem(AUTH_STATE_PREFIX + state);
+  window.history.replaceState({}, '', '/');
+  if (!token || !expected) return '';
+  sessionStorage.setItem(TOKEN_KEY, token);
+  return token;
+}
+
+function startHostedAuth(mode: 'login' | 'register') {
+  const state = crypto.randomUUID();
+  sessionStorage.setItem(AUTH_STATE_PREFIX + state, 'pending');
+  const url = new URL('/' + mode, AUTH_ORIGIN);
+  url.searchParams.set('client_id', 'cv-tuning');
+  url.searchParams.set('return_url', window.location.origin + '/auth/callback');
+  url.searchParams.set('state', state);
+  url.searchParams.set('lang', 'en');
+  window.location.assign(url);
+}
 
 async function api<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -33,10 +60,8 @@ function errorMessage(error: unknown) {
 }
 
 function App() {
-  const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? '');
+  const [token, setToken] = useState(captureHostedAuthToken);
   const [tab, setTab] = useState<Tab>('workspace');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState<boolean | null>(null);
@@ -98,10 +123,6 @@ function App() {
     run(async () => setDashboard(await api<Row>('/api/dashboard', token)));
   }, [tab, token]);
 
-  const login = (event: FormEvent) => { event.preventDefault(); run(async () => {
-    const result = await api<{ accessToken: string }>('/auth/login', '', { method: 'POST', body: JSON.stringify({ email, password, client_id: 'cv-tuning' }) });
-    sessionStorage.setItem(TOKEN_KEY, result.accessToken); setToken(result.accessToken); setPassword('');
-  }); };
   const grantConsent = () => run(async () => { await api('/api/master/consent', token, { method: 'POST' }); setConsent(true); });
   const saveMaster = (event: FormEvent) => { event.preventDefault(); run(async () => { await api('/api/master', token, { method: 'POST', body: JSON.stringify({ markdown }) }); await loadWorkspace(); }); };
   const uploadMaster = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; const file = new FormData(form).get('file'); if (!(file instanceof File) || !file.size) { setError('Choose a CV file first.'); return; } run(async () => { await api('/api/master/import/upload', token, { method: 'POST', body: new FormData(form) }); await loadWorkspace(); }); };
@@ -123,7 +144,14 @@ function App() {
   const download = (kind: 'pdf' | 'docx') => run(async () => { if (!selected || !revision) return; const response = await fetch(`/api/applications/${selected.id}/renders/${revision.revisionNo}/download/${kind}`, { headers: { authorization: `Bearer ${token}` } }); if (!response.ok) throw new Error(await response.text()); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = `cv-r${revision.revisionNo}.${kind}`; link.click(); URL.revokeObjectURL(url); });
   const supplement = (kind: 'cover-letter' | 'screening') => mutate(kind, kind === 'screening' ? { questions: questions.split('\n').map((value) => value.trim()).filter(Boolean) } : { tone: 'plain' });
 
-  if (!token) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">CV TUNING</p><h1>Tailor your work, not your truth.</h1><p>Grounded CV tailoring with fact-level review before anything is exported.</p>{error && <p className="notice error">{error}</p>}<form onSubmit={login}><label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label><label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label><button disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button></form><p className="muted">Use your Alfares account. The access token stays only in this tab.</p></section></main>;
+  if (!token) return <main className="landing-shell">
+    <header className="landing-nav"><span className="brand">CV TUNING</span><div><button className="text-button" onClick={() => startHostedAuth('login')}>Sign in</button><button onClick={() => startHostedAuth('register')}>Start tailoring</button></div></header>
+    <section className="hero"><p className="eyebrow">EVIDENCE-FIRST APPLICATIONS</p><h1>Land better roles without inventing a different you.</h1><p className="hero-copy">CV Tuning turns your proven experience into a position-specific CV, then shows every change, source fact, and uncertain claim before you send it.</p><div className="hero-actions"><button onClick={() => startHostedAuth('register')}>Build my first tailored CV</button><button className="secondary" onClick={() => startHostedAuth('login')}>I already have an account</button></div><p className="fine-print">No password is entered here. Secure sign-in and registration happen at Alfares Auth.</p></section>
+    <section className="proof-strip"><div><strong>1 master CV</strong><span>Your source of truth</span></div><div><strong>Every role, tailored</strong><span>Against the real job description</span></div><div><strong>Every claim reviewed</strong><span>Before download or submission</span></div></section>
+    <section className="value-section"><div><p className="eyebrow">WHY IT WORKS</p><h2>Recruiters can spot generic AI. You should be able to spot every sentence too.</h2></div><div className="feature-grid"><article><h3>Grounded, not generated from thin air</h3><p>Every tailored bullet is bound to a fact from your master CV. Unsupported and overreaching claims are visibly flagged instead of quietly exported.</p></article><article><h3>Review the actual change</h3><p>See a git-style diff from your source CV, targeted requirement by requirement. Keep what sounds like you, revise what does not.</p></article><article><h3>Apply with momentum</h3><p>Bring a job URL or paste the description. Get a fit report, tailored CV, cover letter, screening answers, and an outcome tracker in one focused workflow.</p></article></div></section>
+    <section className="workflow"><p className="eyebrow">THE WORKFLOW</p><h2>Proof in. Better application out.</h2><ol><li><strong>Bring your CV.</strong><span>Paste, upload, or import the record of work you can stand behind.</span></li><li><strong>Add a position.</strong><span>We map its requirements to your real experience and show the gaps.</span></li><li><strong>Review, revise, approve.</strong><span>Use voice or text, confirm every disputed claim, then download when it is truly yours.</span></li></ol></section>
+    <section className="closing"><p className="eyebrow">READY WHEN YOU ARE</p><h2>Your next application should sound like your best work, not like a prompt.</h2><button onClick={() => startHostedAuth('register')}>Start with your master CV</button><p className="fine-print">Account access is managed by Alfares Auth. CV Tuning never collects your password.</p></section>
+  </main>;
 
   const bullets = (revision?.provenance as Row | undefined)?.bullets as Row[] | undefined;
   const hunks = diff?.hunks as Array<{ type?: string; value?: string; lines?: string[] }> | undefined;
