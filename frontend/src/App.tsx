@@ -101,8 +101,10 @@ function App() {
     }
     setJobs(jobRows);
     try {
-      const master = await api<{ markdown: string; version: number }>('/api/master', token);
-      setMarkdown(master.markdown); setMasterVersion(master.version);
+      const master = await api<{ markdown?: string; version?: number }>('/api/master', token);
+      // Coerced, not trusted: `markdown` feeds a controlled textarea and `markdown.trim()`,
+      // so a missing field would throw during render and blank the whole workspace.
+      setMarkdown(master.markdown ?? ''); setMasterVersion(master.version ?? null);
     } catch (cause) {
       if ((cause as ApiError).status !== 404) throw cause;
       setMarkdown(''); setMasterVersion(null);

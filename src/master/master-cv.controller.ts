@@ -21,6 +21,7 @@ import { DocumentImporter } from './importers/document.importer';
 import { GdocsImporter } from './importers/gdocs.importer';
 import { LinkedinImporter } from './importers/linkedin.importer';
 import { MasterCvService } from './master-cv.service';
+import { SourceType } from './master.types';
 import { ConsentService } from './consent.service';
 
 interface AuthedRequest {
@@ -37,6 +38,16 @@ interface UploadedDocument {
 /** Large enough for any real CV, small enough that a bad upload cannot exhaust memory. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ZIP_MIMES = ['application/zip', 'application/x-zip-compressed'];
+
+/** The exact shape `GET /api/master` returns. Clients may rely on these fields only. */
+export interface CurrentMasterView {
+  id: string;
+  version: number;
+  markdown: string;
+  sourceType: SourceType;
+  createdAt: Date;
+  factCount: number;
+}
 
 @Controller('api/master')
 @UseGuards(CvAuthGuard)
@@ -95,13 +106,29 @@ export class MasterCvController {
     return this.master.save(req.user.id, markdown, 'upload', key);
   }
 
+  /**
+   * Returns an explicit view of the current master CV, not the stored row.
+   *
+   * Returning the entity shipped `factsExtractedFromMarkdownSha`, ownership flags and the
+   * whole fact graph to the browser, and nested the document one level deeper than the
+   * client read it. A client reading `markdown` off a response that only ever carried
+   * `master.markdown` got `undefined` and blanked its own workspace, so the shape this
+   * route promises is now written down here. Facts have their own route.
+   */
   @Get()
-  async getCurrent(@Req() req: AuthedRequest) {
+  async getCurrent(@Req() req: AuthedRequest): Promise<CurrentMasterView> {
     const current = await this.master.getCurrent(req.user.id);
     if (!current) {
       throw new NotFoundException('no master CV for this user yet');
     }
-    return current;
+    return {
+      id: current.master.id,
+      version: current.master.version,
+      markdown: current.master.markdown,
+      sourceType: current.master.sourceType,
+      createdAt: current.master.createdAt,
+      factCount: current.facts.length,
+    };
   }
 
   @Get('consent')

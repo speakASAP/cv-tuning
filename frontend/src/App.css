@@ -4,3 +4,19 @@
 .field-help{margin:-6px 0 0;color:#657188;font-size:.82rem;line-height:1.45}.field-help strong{color:#3c4f72}
 
 .notice.working{display:flex;align-items:center;gap:10px}.notice.working:before{content:"";width:14px;height:14px;flex:none;border:2px solid #3157a6;border-top-color:transparent;border-radius:50%;animation:cv-spin .8s linear infinite}@keyframes cv-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.notice.working:before{animation:none}}
+
+.boundary {
+  max-width: 40rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.boundary-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  opacity: 0.75;
+}

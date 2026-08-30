@@ -60,10 +60,36 @@ describe('MasterCvController', () => {
     await expect(controller.getCurrent(authed())).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('returns the current master when it exists', async () => {
-    service.getCurrent.mockResolvedValueOnce({ master: { version: 2 }, facts: [] });
+  it('returns the current master as a flat view, without internals', async () => {
+    service.getCurrent.mockResolvedValueOnce({
+      master: {
+        id: 'm2',
+        userId: 'u1',
+        version: 2,
+        markdown: '# CV',
+        sourceType: 'gdocs',
+        createdAt: new Date('2026-08-30T00:00:00Z'),
+        factsExtractedFromMarkdownSha: 'sha-abc',
+        isCurrent: true,
+      },
+      facts: [{ factId: 'f1' }, { factId: 'f2' }],
+    });
 
-    await expect(controller.getCurrent(authed())).resolves.toMatchObject({ master: { version: 2 } });
+    const view = await controller.getCurrent(authed());
+
+    // Flat, because the client reads `markdown` and `version` off the response itself.
+    expect(view).toEqual({
+      id: 'm2',
+      version: 2,
+      markdown: '# CV',
+      sourceType: 'gdocs',
+      createdAt: new Date('2026-08-30T00:00:00Z'),
+      factCount: 2,
+    });
+    // Internals stay server-side: the browser has no use for them and they leak ownership.
+    expect(Object.keys(view)).not.toContain('factsExtractedFromMarkdownSha');
+    expect(Object.keys(view)).not.toContain('userId');
+    expect(Object.keys(view)).not.toContain('facts');
   });
 
   it('404s the facts view when the user has no master CV', async () => {
