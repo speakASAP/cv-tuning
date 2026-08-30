@@ -20,12 +20,11 @@ export interface ReconcileReport {
  * Offboarding reconciliation (spec §3.2): find `cv_profile` rows whose auth account is gone and
  * hard-delete them, so PII does not persist after a user deletes their identity.
  *
- * BLOCKED BY DESIGN until auth exposes a listing/existence capability. auth-microservice emits no
- * offboarding events and — as of this phase — offers no endpoint to ask "does this user still
- * exist?". Rather than invent one, the check goes through `IdentityProviderPort`; when no real
- * lookup is configured the job refuses to run and reports `blocked`. It NEVER purges on an
- * unconfirmed signal: only a provider that positively CONFIRMS an account is gone triggers a
- * delete, so an auth outage can never cascade into deleting a live user's data.
+ * The check goes through `IdentityProviderPort`, which calls auth-microservice's protected,
+ * existence-only endpoint when configured. When the capability is unavailable the job refuses to
+ * run and reports `blocked`. It NEVER purges on an unconfirmed signal: only a provider that
+ * positively CONFIRMS an account is gone triggers a delete, so an auth outage can never cascade
+ * into deleting a live user's data.
  */
 @Injectable()
 export class OffboardingService {
@@ -40,9 +39,8 @@ export class OffboardingService {
   async reconcile(): Promise<ReconcileReport> {
     if (!this.idp.available) {
       const reason =
-        'no identity-provider lookup capability (AUTH_USER_LOOKUP_URL unset); auth-microservice ' +
-        'exposes no user-existence API, so orphan detection cannot run without risking deletion ' +
-        'of live users';
+        'no identity-provider lookup capability (AUTH_USER_LOOKUP_URL unset); reconciliation ' +
+        'cannot run without an authoritative account-existence answer';
       this.logger.warn(`offboarding reconciliation blocked: ${reason}`);
       return { status: 'blocked', reason, checked: 0, purged: 0, unresolved: 0, purgedUserIds: [] };
     }

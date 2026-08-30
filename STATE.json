@@ -4,7 +4,7 @@
   "updated": "2026-08-30",
   "branch": "main",
   "lastCommit": "26ffe25",
-  "gate": "Phase 7 (GDPR) core landed: consent enforcement, export, hard-delete cascade, retention. Third-party users are now gated on current consent; offboarding reconciliation is blocked pending an auth user-listing API.",
+  "gate": "Phase 7 (GDPR) core landed: consent enforcement, export, hard-delete cascade, retention, and auth-backed offboarding reconciliation. Third-party users are gated on current consent.",
   "models": "Development uses existing free tiers only (cheap|smart). Premium is deferred until the funded production rollout and remains per-call human-approved.",
   "phases": {
     "0": {
@@ -38,7 +38,7 @@
     },
     "7": {
       "status": "done",
-      "what": "GDPR: pseudonymization, consent + enforcement, delete-cascade, export, retention; offboarding reconciliation seam (blocked pending auth list API)"
+      "what": "GDPR: pseudonymization, consent + enforcement, delete-cascade, export, retention, and fail-safe auth-backed offboarding reconciliation"
     },
     "8": {
       "status": "blocked",
@@ -67,6 +67,7 @@
   },
   "openItems": [
     "JWKS exception request for local token verification (spec 3.2)",
+    "Offboarding reconciliation is wired to auth-microservice's protected existence-only endpoint; it still never deletes on a timeout, transport failure, or any response other than a confirmed 404.",
     "Premium benchmark and pricing remain deferred until the funded production rollout; development continues on cheap|smart only",
     "BASELINE RECORDED 2026-08-24: docs/evals/2026-08-24-grounding-baseline.md. 7/7 fixtures, 0 errors, 0 unsupported bullets (target: 0). Both grounding layers held on all three claim-smuggling instructions, and the legitimate-tightening control was not over-refused. Diff against this table before/after any edit to tailor.prompt.ts or entail.prompt.ts.",
     "LiteLLM per-model timeout for CV prompts is set and verified (2026-08-24): smart=58s, smart-fallback=10s in litellm_config.yaml litellm_params; free/cheap keep the global 30s so education-service drills are unaffected. Budget nests inside LITELLM_TIMEOUT_MS=75s (58+10+5=73s). Eval re-run after the change: 7/7 fixtures, 0 errors. WATCH: one call still hit 61.1s, above the 58s budget, and succeeded only narrowly. If truncated-JSON errors reappear this is the first thing to check; raising smart further needs either smart-fallback below 10s or a higher LITELLM_TIMEOUT_MS, which education-service 180s pins from above.",
@@ -85,7 +86,7 @@
     "PHASE 7 FOUNDATION RESOLVED 2026-08-27. All outbound AI prompts pass through src/ai/pseudonymize.ts, which redacts direct contact identifiers before the shared ai-microservice boundary; local rendering retains the original contact data.",
     "PHASE 7 CONSENT FOUNDATION RESOLVED 2026-08-27. ConsentService records the separately versioned CV-processing notice and consent timestamp on cv_profile, exposes authenticated GET/POST /api/master/consent, and keeps repeat grants for the same version idempotent.",
     "PHASE 7 GDPR CORE RESOLVED 2026-08-27. ConsentGuard (src/master/consent.guard.ts) gates CV-processing routes on CURRENT consent (stored version must equal CV_CONSENT_VERSION), applied at method level to master save/imports, job score, and application create/regenerate/revise/confirm-claim/approve/retry-export/cover-letter/screening; it runs AFTER the controller-level CvAuthGuard and reads req.user. Read-only and data-subject-rights routes are deliberately NOT gated. New src/privacy module: GET /api/privacy/export (full graph + artifact bytes/refs), DELETE /api/privacy/account (verified-MinIO-then-transactional-DB hard-delete cascade), POST /api/privacy/retention (expire cv_job.rawText past expiresAt keeping parsed; purge orphaned artifacts), POST /api/privacy/reconcile (offboarding). MinioService gained deleteObject (DELETE then HEAD-verify) and objectExists. No migration — every column already existed.",
-    "PHASE 7 OFFBOARDING BLOCKED 2026-08-27 (not an oversight). Offboarding reconciliation (OffboardingService.reconcile) is implemented but BLOCKED at runtime: auth-microservice emits no offboarding events AND exposes no user-listing/existence API, so there is no authoritative 'this account is gone' signal. The check goes through IdentityProviderPort (src/privacy/identity-provider.ts) behind the AUTH_USER_LOOKUP_URL seam; with no lookup configured reconcile() returns {status:'blocked'} and purges nothing. It NEVER deletes on an unresolved/null lookup — only a positively CONFIRMED-gone (404) account is purged — so an auth outage cannot cascade into deleting a live user's data. Unblocks only when auth grows a user-existence endpoint. Do not fabricate one.",
+    "PHASE 7 OFFBOARDING UNBLOCKED 2026-08-30. auth-microservice supplies protected GET /internal/users/:userId/existence, returning only 200 for an existing UUID and 404 for a confirmed miss. cv-tuning now calls it through IdentityProviderPort using an auth-allowlisted internal service capability stored only in Vault. Reconcile deletes only after a confirmed 404; it reports unresolved and preserves data on a timeout, transport failure, or any other response.",
     "PHASE 7 DELETE/RETENTION ORDERING is load-bearing: the MinIO object is deleted and VERIFIED gone (MinioService.deleteObject does DELETE then a HEAD that must 404) BEFORE the DB row that references it. A row deleted while its object lingers is an unreferenced orphan (unrecoverable); an object deleted while its row lingers is recovered by re-running the idempotent cascade. The hard-delete cascade and purgeOrphanedArtifacts both follow object-before-row; do not reorder them.",
     "PHASE 7 published sub-processor list is docs/privacy/subprocessors.md (OpenRouter, Google, Anthropic, self-hosted MinIO from spec §9). DPA URLs are [MISSING: authoritative DPA URL] placeholders on purpose — a guessed DPA link is a compliance claim the project cannot stand behind. Replace only from an authoritative source.",
     "PHASE 8 PARTIAL BENCHMARK RECORDED 2026-08-30: using five consented external fixtures (never committed), cheap completed 5/5 with 21 supported / 1 overreach / 0 unsupported bullets at 10.23s average total latency; smart completed 5/5 with 21 supported / 0 overreach / 0 unsupported bullets at 13.37s. Premium reached the approved route but the provider returned HTTP 402 because the configured OpenRouter account has no purchased credits. Per user direction, development continues on cheap|smart; premium routing and its paid benchmark are deferred until the funded production rollout. The benchmark client still requires CV_BENCHMARK_PREMIUM_HUMAN_APPROVED=true for each future premium call and skips premium when CV_BENCHMARK_PREMIUM_MODELS is unset. Output stays in gitignored benchmark-output because it contains tailored text from real CVs."

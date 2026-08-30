@@ -11,12 +11,10 @@ const LOOKUP_TIMEOUT_MS = 3000;
 /**
  * The seam for offboarding reconciliation (spec §3.2).
  *
- * auth-microservice emits no offboarding events (ECOSYSTEM_MAP.md:126) AND — as of this phase —
- * exposes no user-listing or user-existence API this service could poll. Reconciliation therefore
- * cannot be implemented against a real capability yet; inventing an auth endpoint would be
- * fabrication. This port is the documented, non-fabricated place that capability plugs into when
- * auth grows one. Until then the default implementation reports `available === false` and
- * reconciliation refuses to run rather than guessing.
+ * auth-microservice's protected `GET /internal/users/:userId/existence` endpoint is the
+ * authoritative account-existence capability. This port keeps the reconciliation policy explicit:
+ * a missing configuration remains unavailable, and an unavailable or ambiguous provider response
+ * never becomes evidence that an account is gone.
  */
 export interface IdentityProviderPort {
   /** Whether a real lookup capability is configured. When false, reconciliation must not purge. */
@@ -33,9 +31,8 @@ export interface IdentityProviderPort {
 }
 
 /**
- * Default provider. Reads an OPTIONAL `AUTH_USER_LOOKUP_URL`. When unset (the current reality,
- * since auth exposes no such endpoint) it is unavailable and every lookup returns `null`, so the
- * offboarding job stays safely blocked. When a real endpoint is later configured, a GET of
+ * Default provider. Reads an OPTIONAL `AUTH_USER_LOOKUP_URL`. When unset it is unavailable and
+ * every lookup returns `null`, so the offboarding job stays safely blocked. A configured GET of
  * `${lookupUrl}/${userId}` is read as: 200 → exists, 404 → confirmed gone, anything else → `null`.
  */
 @Injectable()
