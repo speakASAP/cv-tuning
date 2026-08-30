@@ -10,3 +10,14 @@ coverage/
 # Phase 8 tier benchmark output (docs/evals/2026-08-28-phase-8-benchmark.md): contains
 # tailored bullet text derived from real, consented CVs and must never be committed.
 benchmark-output/
+
+# Required secret and backup exclusions
+k8s/secret.yaml
+secrets/
+keys/
+*.pem
+*.key
+*private*
+*backup*
+*bck*
+*.bak*

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cv-tuning-frontend
+  namespace: statex-apps
+  labels:
+    app: cv-tuning-frontend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cv-tuning-frontend
+  template:
+    metadata:
+      labels:
+        app: cv-tuning-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: localhost:5000/cv-tuning-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10

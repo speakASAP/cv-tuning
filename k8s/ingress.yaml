@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cv-tuning
+  namespace: statex-apps
+  labels:
+    app: cv-tuning
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - cv.alfares.cz
+      secretName: cv-tuning-tls
+  rules:
+    - host: cv.alfares.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cv-tuning-frontend
+                port:
+                  number: 80
