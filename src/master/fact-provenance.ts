@@ -9,7 +9,7 @@ const EM_DASH = '—';
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const FENCE = /^\s*(```|~~~)/;
 /** A leading list marker (`- `, `* `, `1. `) or blockquote, which is markup, not fact text. */
-const LIST_MARKER = /^\s{0,3}(?:[-*+]\s+|\d{1,3}[.)]\s+|>\s?)/;
+const LIST_MARKER = /^\s{0,3}(?:[-*+]\s+|[\u2022\u25cf\u25cb\u25aa\u2023\u00b7]\s*|\d{1,3}[.)]\s+|>\s?)/;
 
 /**
  * Below this many normalised characters a fact is too generic for containment matching:

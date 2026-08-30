@@ -104,10 +104,18 @@ describe('MasterCvController', () => {
   });
 
   it('rejects an unsupported upload type by name', async () => {
-    const file = { buffer: Buffer.from('x'), mimetype: 'image/png', originalname: 'cv.png', size: 1 };
+    const file = { buffer: Buffer.from('x'), mimetype: 'application/x-msdownload', originalname: 'cv.exe', size: 1 };
 
-    await expect(controller.importUpload(authed(), file as never)).rejects.toThrow(/image\/png/);
+    await expect(controller.importUpload(authed(), file as never)).rejects.toThrow(/x-msdownload/);
     expect(storage.putObject).not.toHaveBeenCalled();
+  });
+
+  it('accepts a photographed or scanned CV, which OCR reads', async () => {
+    const file = { buffer: Buffer.from('\x89PNG'), mimetype: 'image/png', originalname: 'cv.png', size: 4 };
+
+    await controller.importUpload(authed(), file as never);
+
+    expect(service.save).toHaveBeenCalledWith('u1', '# CV from file', 'upload', expect.stringMatching(/\.png$/));
   });
 
   it('stores the original upload before parsing it', async () => {

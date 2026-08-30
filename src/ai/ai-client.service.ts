@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { createHmac, createSign } from 'crypto';
 import { pseudonymizePrompt } from './pseudonymize';
+import { base64url, mintServiceToken } from './service-token';
 
 export const AI_FETCH = 'CV_AI_FETCH';
 export const AI_SERVICE_URL = 'CV_AI_SERVICE_URL';
@@ -38,13 +38,7 @@ const EXPECTED_MODELS: Record<AiTier, readonly string[]> = {
   smart: ['openrouter/google/gemma-4-31b-it:free'],
 };
 
-/**
- * ServiceAuthGuard on /ai/complete verifies HS256 against JWT_SECRET and requires `iss`
- * to be exactly "ai-microservice" (JwtUtil.verify), regardless of which service calls.
- */
-const TOKEN_ISSUER = 'ai-microservice';
 const SERVICE_ID = 'cv-tuning';
-const TOKEN_TTL_SECONDS = 900;
 
 /**
  * Above the LiteLLM proxy's own request_timeout (120s). A caller timeout shorter than the
@@ -52,9 +46,6 @@ const TOKEN_TTL_SECONDS = 900;
  * the proxy log — the incident documented in litellm_config.yaml router_settings.
  */
 const DEFAULT_TIMEOUT_MS = 150_000;
-
-const base64url = (input: Buffer | string): string =>
-  Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 @Injectable()
 export class AiClientService {
@@ -173,28 +164,6 @@ export class AiClientService {
   }
 
   private mintServiceToken(): string {
-    if (this.jwtPrivateKey) {
-      const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-      const now = Math.floor(Date.now() / 1000);
-      const payload = base64url(
-        JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
-      );
-      const signature = base64url(
-        createSign('RSA-SHA256').update(`${header}.${payload}`).sign(this.jwtPrivateKey),
-      );
-      return `${header}.${payload}.${signature}`;
-    }
-
-    if (!this.jwtSecret) {
-      throw new Error('JWT_SECRET or JWT_PRIVATE_KEY is not set; cannot authenticate to ai-microservice');
-    }
-
-    const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const now = Math.floor(Date.now() / 1000);
-    const payload = base64url(
-      JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
-    );
-    const signature = base64url(createHmac('sha256', this.jwtSecret).update(`${header}.${payload}`).digest());
-    return `${header}.${payload}.${signature}`;
+    return mintServiceToken(SERVICE_ID, this.jwtPrivateKey, this.jwtSecret);
   }
 }

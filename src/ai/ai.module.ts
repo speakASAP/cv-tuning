@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AI_JWT_SECRET, AI_SERVICE_URL, AiClientService } from './ai-client.service';
+import { DocumentsClientService } from './documents-client.service';
 
 @Module({
   imports: [ConfigModule],
@@ -27,7 +28,8 @@ import { AI_JWT_SECRET, AI_SERVICE_URL, AiClientService } from './ai-client.serv
       },
     },
     AiClientService,
+    DocumentsClientService,
   ],
-  exports: [AiClientService],
+  exports: [AiClientService, DocumentsClientService],
 })
 export class AiModule {}

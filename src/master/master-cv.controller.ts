@@ -75,7 +75,7 @@ export class MasterCvController {
     const isZip = ZIP_MIMES.includes(file.mimetype) || file.originalname.toLowerCase().endsWith('.zip');
     if (!isZip && !DocumentImporter.isSupported(file.mimetype)) {
       throw new BadRequestException(
-        `unsupported file type ${file.mimetype}. Upload a PDF, DOCX, plain text, or a LinkedIn export zip.`,
+        `unsupported file type ${file.mimetype}. Upload a PDF, DOCX, plain text, a photo or scan of your CV, or a LinkedIn export zip.`,
       );
     }
 
@@ -91,7 +91,7 @@ export class MasterCvController {
       return this.master.save(req.user.id, markdown, 'linkedin', key);
     }
 
-    const markdown = await this.documents.extract(file.buffer, file.mimetype);
+    const markdown = await this.documents.extract(file.buffer, file.mimetype, file.originalname);
     return this.master.save(req.user.id, markdown, 'upload', key);
   }
 

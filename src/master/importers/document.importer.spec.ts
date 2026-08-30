@@ -1,66 +1,68 @@
-import { DocumentImporter } from './document.importer';
+import { DocumentImporter, DOCX_MIME, PDF_MIME } from './document.importer';
 
 describe('DocumentImporter', () => {
+  let documents: { extract: jest.Mock };
   let importer: DocumentImporter;
-  let parsePdf: jest.Mock;
-  let parseDocx: jest.Mock;
 
   beforeEach(() => {
-    parsePdf = jest.fn(async () => ({ text: 'CV text from pdf' }));
-    parseDocx = jest.fn(async () => ({ value: 'CV text from docx' }));
-    importer = new DocumentImporter(parsePdf as never, parseDocx as never);
+    documents = {
+      extract: jest.fn(async () => ({ text: 'CV text', engine: 'pdf-text', ocrUsed: false, pages: 1 })),
+    };
+    importer = new DocumentImporter(documents as never);
   });
 
-  it('extracts text from a PDF', async () => {
-    await expect(importer.extract(Buffer.from('%PDF'), 'application/pdf')).resolves.toBe('CV text from pdf');
+  it('reads a PDF through the shared document service', async () => {
+    await expect(importer.extract(Buffer.from('%PDF'), PDF_MIME, 'cv.pdf')).resolves.toBe('CV text');
+    expect(documents.extract).toHaveBeenCalledWith(expect.any(Buffer), PDF_MIME, 'cv.pdf');
   });
 
-  it('extracts text from a DOCX', async () => {
-    const mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  it('reads a DOCX through the same path rather than a second parser stack', async () => {
+    await importer.extract(Buffer.from('PK'), DOCX_MIME, 'cv.docx');
 
-    await expect(importer.extract(Buffer.from('PK'), mime)).resolves.toBe('CV text from docx');
+    expect(documents.extract).toHaveBeenCalledWith(expect.any(Buffer), DOCX_MIME, 'cv.docx');
   });
 
-  it('accepts plain text directly without a parser', async () => {
-    await expect(importer.extract(Buffer.from('# My CV'), 'text/plain')).resolves.toBe('# My CV');
-    expect(parsePdf).not.toHaveBeenCalled();
-    expect(parseDocx).not.toHaveBeenCalled();
+  it('accepts a scanned CV, which OCR can now read', () => {
+    expect(DocumentImporter.isSupported('image/png')).toBe(true);
+    expect(DocumentImporter.isSupported('image/jpeg')).toBe(true);
   });
 
   it('rejects an unsupported mime type by name', async () => {
-    await expect(importer.extract(Buffer.from('x'), 'image/png')).rejects.toThrow(/image\/png/);
+    await expect(importer.extract(Buffer.from('x'), 'application/x-msdownload')).rejects.toThrow(
+      /application\/x-msdownload/,
+    );
+    expect(documents.extract).not.toHaveBeenCalled();
   });
 
-  it('raises when a PDF has no text layer rather than returning an empty CV', async () => {
-    // A scanned CV parses "successfully" to an empty string. Treating that as a valid
-    // empty CV would silently wipe the user's document.
-    parsePdf.mockResolvedValueOnce({ text: '   ' });
-
-    await expect(importer.extract(Buffer.from('%PDF'), 'application/pdf')).rejects.toThrow(/no extractable text/i);
+  it('rejects an empty upload before calling the document service', async () => {
+    await expect(importer.extract(Buffer.alloc(0), PDF_MIME)).rejects.toThrow(/empty/);
+    expect(documents.extract).not.toHaveBeenCalled();
   });
 
-  it('raises when a DOCX extracts to nothing', async () => {
-    parseDocx.mockResolvedValueOnce({ value: '' });
-    const mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  it('surfaces the document service message so the user can act on it', async () => {
+    documents.extract.mockRejectedValueOnce(
+      new Error('no text could be extracted from this document.'),
+    );
 
-    await expect(importer.extract(Buffer.from('PK'), mime)).rejects.toThrow(/no extractable text/i);
+    await expect(importer.extract(Buffer.from('%PDF'), PDF_MIME)).rejects.toThrow(/no text could be extracted/);
   });
 
-  it('raises with context when the PDF parser itself throws', async () => {
-    parsePdf.mockRejectedValueOnce(new Error('corrupt xref table'));
-
-    await expect(importer.extract(Buffer.from('%PDF'), 'application/pdf')).rejects.toThrow(/corrupt xref table/);
+  it('stores an extension per supported type so the original stays identifiable', () => {
+    expect(DocumentImporter.extensionFor(PDF_MIME)).toBe('pdf');
+    expect(DocumentImporter.extensionFor('image/png')).toBe('png');
+    expect(DocumentImporter.extensionFor('application/unknown')).toBe('bin');
   });
 
-  it('rejects an empty upload before attempting to parse it', async () => {
-    await expect(importer.extract(Buffer.alloc(0), 'application/pdf')).rejects.toThrow(/empty/i);
-    expect(parsePdf).not.toHaveBeenCalled();
-  });
+  it('returns recognised text for a scan instead of refusing it', async () => {
+    documents.extract.mockResolvedValueOnce({
+      text: 'Recognised CV text',
+      engine: 'ocr',
+      ocrUsed: true,
+      pages: 2,
+    });
 
-  it('reports the extension for a given mime type', () => {
-    expect(DocumentImporter.extensionFor('application/pdf')).toBe('pdf');
-    expect(
-      DocumentImporter.extensionFor('application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
-    ).toBe('docx');
+    await expect(importer.extract(Buffer.from('%PDF'), PDF_MIME, 'scan.pdf')).resolves.toBe(
+      'Recognised CV text',
+    );
   });
 });
