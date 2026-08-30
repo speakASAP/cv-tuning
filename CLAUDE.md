@@ -39,13 +39,10 @@ rtk npx ts-node src/applications/__evals__/run-eval.ts   # needs CV_AI_SERVICE_U
 ```
 
 Run it before and after any edit to `tailor.prompt.ts` or `entail.prompt.ts` and diff the
-tables — it is the only regression net for prompt changes. No baseline is recorded yet: the
-2026-08-23 attempt against the live ai-microservice errored on all 7 fixtures because that
-deployment returns `model_used: "smart"` (a tier name, not a real model id), which
-`ai-client.service.ts:127` correctly flags as degraded — `TailorService`/`ReviseService` then
-correctly refuse the completion (spec §8.1). That's the anti-fabrication guard working as
-intended, not an eval-harness bug, but it means the baseline is still blocked on an
-ai-microservice fix (see `STATE.json.openItems`).
+tables — it is the only regression net for prompt changes. The current baseline is recorded in
+`docs/evals/2026-08-24-grounding-baseline.md`; it completed all 7 synthetic fixtures with zero
+unsupported bullets. The service reports a real served-model identifier and the client treats an
+unresolved or fallback-served model as degraded, preserving the anti-fabrication guard.
 
 The **Phase 8 tier benchmark** (`benchmark-run.ts`) is a separate, also non-CI harness —
 not an extension of the grounding eval above. It runs the same tailoring+entailment
@@ -60,10 +57,11 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 # handling: docs/evals/2026-08-28-phase-8-benchmark.md
 ```
 
-Infrastructure only as of 2026-08-28 — no run has been executed. It uses its own
-`BenchmarkTier`/`BenchmarkAiClientService` (`benchmark-client.ts`), not production
-`AiTier`/`AiClientService`, specifically so `premium` never becomes reachable from
-production code (STATE.json: "premium is BLOCKED").
+Cheap and smart benchmark evidence is recorded in `STATE.json`: both completed all five
+consented external fixtures on 2026-08-30, while premium is deferred until the funded production
+rollout. It uses its own `BenchmarkTier`/`BenchmarkAiClientService` (`benchmark-client.ts`), not
+production `AiTier`/`AiClientService`, specifically so premium never becomes reachable from
+production code during development.
 
 ## Architecture
 
@@ -242,7 +240,7 @@ reviewed or downloaded.
 literally `ai-microservice`, regardless of caller). It returns `modelUsed` and a `degraded`
 flag: a silent LiteLLM fallback is a quality collapse that still returns well-formed prose,
 so an unexpected model is logged at error level and marked degraded (spec §8.1). Only the
-free `cheap` and `smart` tiers are allowed; `premium` is blocked until the Phase 8 benchmark.
+development uses the existing free `cheap` and `smart` tiers; premium is deferred until the funded production rollout, where it will require explicit per-call approval.
 
 Migrations run via `migrationsRun: true` at boot — there is **no standalone data-source**, so
 any scratch-DB check needs a direct `DataSource` script.

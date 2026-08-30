@@ -41,15 +41,15 @@
       "what": "GDPR: pseudonymization, consent + enforcement, delete-cascade, export, retention; offboarding reconciliation seam (blocked pending auth list API)"
     },
     "8": {
-      "status": "todo",
+      "status": "blocked",
       "what": "Cheap/smart benchmark completed 2026-08-30 on five consented external CV fixtures: cheap 5/5 (21 supported, 1 overreach), smart 5/5 (21 supported, 0 overreach). Premium comparison is deferred until the funded production rollout; the development LiteLLM router intentionally does not expose premium."
     },
     "9": {
-      "status": "todo",
+      "status": "blocked",
       "what": "Premium enablement, only if Phase 8 justifies it"
     },
     "10": {
-      "status": "todo",
+      "status": "blocked",
       "what": "Billing / pricing / tiers via payments-microservice"
     }
   },
