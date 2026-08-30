@@ -28,6 +28,11 @@ one-time cost/quality question. The two never share fixtures and must not be con
 
 ## Running it
 
+Development uses the existing free `cheap` and `smart` routes only. Leave
+`CV_BENCHMARK_PREMIUM_MODELS` unset (or set `CV_BENCHMARK_TIERS=cheap,smart`) until a
+funded production rollout explicitly enables a premium route; the runner then records
+premium rows as skipped rather than attempting paid calls.
+
 ```bash
 CV_AI_SERVICE_URL=http://<ai-microservice clusterIP>:3380 \
 CV_AI_JWT_SECRET=<matches ai-microservice's JWT_SECRET> \
