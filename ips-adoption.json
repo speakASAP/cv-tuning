@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "profile": "runtime-service",
+  "project": {
+    "name": "cv-tuning",
+    "repository": "https://github.com/speakASAP/cv-tuning"
+  },
+  "standard": {
+    "repository": "https://github.com/speakASAP/intent-preservation-system",
+    "revision": "93b841891f890bbb1250bb371be3dedb6354e108"
+  },
+  "artifacts": {
+    "readme": "README.md",
+    "business": "BUSINESS.md",
+    "system": "SYSTEM.md",
+    "agents": "AGENTS.md",
+    "operations": "AGENT_OPERATIONS.md",
+    "claude": "CLAUDE.md",
+    "tasks": "TASKS.md",
+    "state": "STATE.json",
+    "constitution": "docs/00_constitution/CONSTITUTION.md",
+    "vision": "docs/01_vision/VISION.md",
+    "integrationContract": "docs/06_architecture/INTEGRATION_CONTRACT.md",
+    "projectInvariants": "docs/17_governance/PROJECT_INVARIANTS.md",
+    "validationDebt": "docs/orchestrator/VALIDATION_DEBT.md",
+    "bootstrapTask": "docs/11_tasks/TASK-001-bootstrap-service.md",
+    "bootstrapGoalImpact": "docs/22_goal_impact/GOAL-IMPACT-TASK-001.md",
+    "bootstrapExecutionPlan": "docs/21_execution_plans/EP-TASK-001-bootstrap-service.md",
+    "bootstrapValidation": "docs/12_validation/VAL-TASK-001-bootstrap-service.md"
+  },
+  "integrationReview": [
+    {
+      "capability": "auth",
+      "component": "auth-microservice",
+      "decision": "required",
+      "reason": "The service enforces user access and consent before job-tailoring workflows can operate on personal CV data.",
+      "contract": "Authenticated user session and service-controlled access checks for CV, consent, and export state.",
+      "configuration": "Auth integration is configured for the cv-tuning service boundary and consent gating.",
+      "failureMode": "Access is denied and the workflow fails closed without processing personal CV data.",
+      "validation": "User access and consent-specific checks pass in the service validation gate."
+    },
+    {
+      "capability": "postgres",
+      "component": "db-server-postgres",
+      "decision": "required",
+      "reason": "The service keeps master CV data, application state, and consent metadata in durable relational storage.",
+      "contract": "Persistent relational records for applications, renders, consent state, and export metadata.",
+      "configuration": "Postgres database configuration and migrations for the cv-tuning domain tables.",
+      "failureMode": "The service surfaces storage failure and prevents completion of uncommitted work.",
+      "validation": "Database-backed lifecycle and persistence tests pass in the repo validation flow."
+    },
+    {
+      "capability": "redis",
+      "component": "db-server-redis",
+      "decision": "required",
+      "reason": "Redis supports workflow coordination, temporary state, and cache behavior used by the service processing path.",
+      "contract": "Short-lived cache and workflow handoff state for the application lifecycle.",
+      "configuration": "Redis host and key-space configuration for the service runtime.",
+      "failureMode": "Temporary degradation is surfaced without corrupting the underlying master state.",
+      "validation": "Runtime validation confirms the service handles cache or workflow degradation safely."
+    },
+    {
+      "capability": "logging",
+      "component": "logging-microservice",
+      "decision": "required",
+      "reason": "Runtime services emit structured logs for health, review, and operational analysis.",
+      "contract": "POST to http://logging-microservice:3367 with service, level, msg, duration_ms, and timestamp fields.",
+      "configuration": "Structured logging configuration through the shared logging service.",
+      "failureMode": "The service keeps operating with degraded observability and surfaces the issue in logs.",
+      "validation": "Structured log emission and monitoring checks are recorded in the validation evidence."
+    },
+    {
+      "capability": "notifications",
+      "component": "notifications-microservice",
+      "decision": "required",
+      "reason": "The service sends outcome and reminder notifications as part of the application lifecycle and user follow-up flow.",
+      "contract": "Authenticated delivery of application reminder and outcome notifications.",
+      "configuration": "Notification channel configuration for the cv-tuning service.",
+      "failureMode": "Notifications fail without blocking the user review and approval flow.",
+      "validation": "Notification path is exercised and the resulting user message flow is observed."
+    },
+    {
+      "capability": "ai",
+      "component": "ai-microservice",
+      "decision": "required",
+      "reason": "Core tailoring, claim grounding, and revision assistance all depend on the shared AI service.",
+      "contract": "AI requests for job analysis, tailoring, and grounded review pass through the approved service boundary.",
+      "configuration": "Model routing, prompt policy, and grounding validation configuration for cv-tuning.",
+      "failureMode": "The service fails safely and does not present unsupported claims as valid output.",
+      "validation": "Grounded generation and eval harness results are used as evidence in the task validation record."
+    },
+    {
+      "capability": "payments",
+      "component": "payments-microservice",
+      "decision": "not-applicable",
+      "reason": "The current product scope does not include billing or payment flows; premium model enablement remains deferred until a funded rollout is approved.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "catalog",
+      "component": "catalog-microservice",
+      "decision": "not-applicable",
+      "reason": "The service does not depend on the product catalog domain in this scope.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "orders",
+      "component": "orders-microservice",
+      "decision": "not-applicable",
+      "reason": "The project is not a commerce order-processing workflow and does not depend on orders domain integration at this stage.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "warehouse",
+      "component": "warehouse-microservice",
+      "decision": "not-applicable",
+      "reason": "No inventory or stock movement process is required by the CV tailoring workflow.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "invoices",
+      "component": "invoices-microservice",
+      "decision": "not-applicable",
+      "reason": "No invoice generation or financial document workflow is present in the approved project scope.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "object-storage",
+      "component": "minio-microservice",
+      "decision": "required",
+      "reason": "PDF and DOCX exports and related stored artifacts require object storage for durable document handling.",
+      "contract": "Object store access for exported documents and uploaded CV assets.",
+      "configuration": "MinIO bucket and artifact configuration for exported documents.",
+      "failureMode": "Export and storage operations fail explicitly instead of silently losing the user approved document state.",
+      "validation": "Export and storage checks are part of the repo validation path."
+    },
+    {
+      "capability": "event-bus",
+      "component": "RabbitMQ",
+      "decision": "not-applicable",
+      "reason": "The current project does not require a RabbitMQ-driven event bus for user-facing CV tailoring or lifecycle management.",
+      "contract": "None.",
+      "configuration": "Not used.",
+      "failureMode": "Not applicable to this onboarding scope.",
+      "validation": "Out of scope."
+    },
+    {
+      "capability": "docs-rag",
+      "component": "docs-rag-microservice",
+      "decision": "required",
+      "reason": "Project documentation must remain discoverable and traceable through the docs-RAG mechanism.",
+      "contract": "Direct Git repository ingestion and retrieval of project documentation.",
+      "configuration": "Repository catalog entry and project metadata in the shared ecosystem config.",
+      "failureMode": "Git remains the authoritative source and retrieval failure does not override validated intent.",
+      "validation": "Repository path resolution and document retrieval remain valid."
+    },
+    {
+      "capability": "monitoring",
+      "component": "monitoring-microservice",
+      "decision": "required",
+      "reason": "Runtime health and readiness must be observable and traceable for the service.",
+      "contract": "GET /health and Kubernetes probes for runtime readiness and health reporting.",
+      "configuration": "Service health and readiness settings in the deployment metadata.",
+      "failureMode": "Readiness blocks rollout until the service is healthy.",
+      "validation": "Health and monitoring checks pass in the service validation path."
+    },
+    {
+      "capability": "backups",
+      "component": "backups-microservice",
+      "decision": "required",
+      "reason": "The service stores personal career data and exported artifacts, so a clear backup posture is required for operational resilience.",
+      "contract": "Backup and restore procedures for persisted user data and document assets.",
+      "configuration": "Backup policy and retention configuration for the service persistent state.",
+      "failureMode": "Service data protection errors are surfaced before broader public rollout.",
+      "validation": "Backup posture is reviewed with deployment and operational readiness checks."
+    }
+  ]
+}

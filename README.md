@@ -1,35 +1,67 @@
 # cv-tuning
 
-CV tailoring platform. A job seeker stores one master CV, submits job-posting URLs, and gets
-a CV tailored to each position — reviewed as a git-style diff, revised through voice-driven
-AI conversation, approved by the human, then downloaded as PDF and DOCX and tracked to
-outcome.
+```yaml
+id: README-cv-tuning
+status: approved
+owner: project owner
+created: 2026-08-30
+last_updated: 2026-08-30
+```
 
-**Port:** 3379 · **Domain:** `cv.alfares.cz` *(planned)* · **Status:** Phase 4 done (master CV
-import, tailoring, revision loop, approval gate, PDF/DOCX export) · Phase 5 next · owner-only,
-no third-party users until Phase 7 (GDPR)
+CV tailoring platform for users who want a truthful, vacancy-specific CV built from their real experience, not a generic AI rewrite.
 
-## Why this is not "generate a CV with AI"
+## Status
 
-49% of hiring managers auto-dismiss AI resumes, 19.6% of recruiters reject specifically for
-AI generation, and ~40% of received applications show clear AI-generation signs. Competitors
-optimize for an ATS parse layer that is now commoditized, while the human layer penalizes
-exactly what they produce.
+The service is in the onboarding and validation phase. The core product scope is intentionally limited to owner-only CV work until consent and GDPR enforcement are complete.
 
-The product is a CV that is **provably the user's own**, tailored with evidence, that does
-not read as AI-written. Anti-fabrication and voice preservation are the primary
-architectural requirements, not prompt details.
+## Documentation Authority
 
-## Documents
+This repository follows the Alfares documentation authority and intent-preservation system. The product remains grounded in the approved AI-powered tailored CV concept and the service-specific adoption record.
 
-- [Design spec](docs/specs/2026-08-22-cv-tailoring-platform-design.md)
-- Depends on the [BPCP workflow executor](../business-process-control-plane/docs/specs/2026-08-22-bpcp-workflow-executor-design.md), built first
+## Capabilities
 
-## Build order
+- Build a persistent master CV knowledge base from user-provided experience, project history, and career evidence.
+- Analyze a target job description and identify the skills, achievements, and framing that are most relevant.
+- Compare the user's evidence to the vacancy and surface missing or weak areas that need clarification.
+- Tailor a truthful CV to a job while maintaining traceability to source facts and avoiding unsupported claims.
+- Support review, revisions, approval, and export to PDF/DOCX.
+- Track the outcome of applications while keeping the user in control of final approval.
 
-Free models (`cheap` / `smart`, ≈€0) for Phases 0–6. GDPR lands in Phase 7, the model
-benchmark in Phase 8, premium in Phase 9 only if the benchmark justifies it, and
-billing/pricing in Phase 10.
+## Interfaces
 
-> **Gate:** no third-party user may access this service before Phase 7 (GDPR) completes.
-> Phases 1–6 run on the owner's own CV data only.
+- Web application for CV intake, review, and approval.
+- AI-assisted tailoring flow for vacancy understanding and content refinement.
+- Export endpoints for PDF and DOCX generation.
+- Dashboard and outcome tracking for the application lifecycle.
+- Structured logging and monitoring integration with the ecosystem standard.
+
+## Development
+
+- Implementation stack: NestJS, TypeORM, Postgres, Redis, MinIO, AI orchestration, and the shared ecosystem services.
+- Local development follows the repo's existing service commands and test suites.
+- The current product scope is owner-only until the GDPR consent gate is complete.
+
+## Configuration
+
+- Service port: 3379
+- Domain: cv.alfares.cz (planned public route, gated by approval)
+- Model usage: existing free tiers during development; premium is deferred until the funded production rollout.
+- Storage: Postgres for durable state, MinIO for document artifacts, and Redis for workflow/cache support if required by the runtime.
+
+## Deployment
+
+- Deploy via the shared Alfares deployment pipeline with serialized deploy execution.
+- Health checks must respond on GET /health.
+- No public third-party access before the GDPR consent gate is complete.
+
+## Health and Observability
+
+- Structured logs are emitted through the shared logging service.
+- Monitoring checks use GET /health and Kubernetes probes.
+- Application outcome and acknowledgement flows are observable through the application dashboard and service logs.
+
+## Approval
+
+Status: approved
+Approved by: project owner
+Approval evidence: owner-confirmation: product-concept-approved-for-cv-tuning
