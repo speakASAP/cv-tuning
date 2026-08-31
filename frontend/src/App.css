@@ -20,3 +20,61 @@
   overflow-wrap: anywhere;
   opacity: 0.75;
 }
+
+.progress-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 44rem);
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: #172b58;
+  color: #eff5ff;
+  box-shadow: 0 12px 30px #17203340;
+  font-size: .92rem;
+  line-height: 1.4;
+}
+
+.progress-spinner {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: 2px solid #a9c1ff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: cv-spin .8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-spinner { animation: none; }
+}
+
+.diff .hunk {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.diff .hunk + .hunk {
+  margin-top: 3px;
+}
+
+.hunk-gutter {
+  flex: none;
+  width: 3.2rem;
+  text-align: right;
+  color: #8792a8;
+  user-select: none;
+}
+
+.hunk-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
