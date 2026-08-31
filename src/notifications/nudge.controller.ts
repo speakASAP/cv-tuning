@@ -56,7 +56,8 @@ export class NudgeController {
       throw new ForbiddenException('invalid nudge callback secret');
     }
 
-    const applicationId = body.context?.applicationId;
+    const context = body && typeof body === 'object' ? body.context : undefined;
+    const applicationId = context?.applicationId;
     if (typeof applicationId !== 'string' || applicationId.length === 0) {
       throw new BadRequestException('nudge callback carries no context.applicationId');
     }

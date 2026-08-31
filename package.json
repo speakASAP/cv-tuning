@@ -23,6 +23,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "docx": "^9.7.1",
+    "fontkit": "^2.0.4",
     "mammoth": "^1.12.1",
     "multer": "^2.2.0",
     "pdf-parse": "^1.1.4",

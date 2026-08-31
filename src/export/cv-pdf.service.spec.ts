@@ -76,6 +76,15 @@ describe('CvPdfService', () => {
       /does not yet support these characters.*王.*export DOCX instead/is,
     );
   });
+
+  it('renders Czech and Cyrillic diacritics that the old WinAnsi-only Helvetica font could not', async () => {
+    // Regression: these exact characters (em dash, Cyrillic, and ů) reached production and
+    // turned Approve into a bare Internal Server Error because the previous Standard-14
+    // Helvetica font only encoded WinAnsi (CP1252). DejaVu Sans covers all of them.
+    const CV_ACCENTED = '# Jiří Novák\n\n## Experience\n### Důlnice — Привет s.r.o. (2020)\n- Zajišťuji včasnou reakci a monitoruji личный ticket';
+    const { content } = await new CvPdfService().render(CV_ACCENTED, 'x');
+    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+  });
 });
 
 describe('CvPdfService: multi-section, title-less entries', () => {

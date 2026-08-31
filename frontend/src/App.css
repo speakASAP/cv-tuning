@@ -97,3 +97,96 @@
   color: #64748b;
   font-size: 0.8rem;
 }
+
+/* The action a person clicks lives at the bottom of a long review panel, but a fetch/action
+   error was rendered inline at the very top of the page \u2014 invisible without scrolling up.
+   Fixed and centered, matching .progress-banner, so it is seen wherever the click happened. */
+.error-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 51;
+  max-width: min(92vw, 44rem);
+  margin: 0;
+  box-shadow: 0 12px 30px #17203340;
+}
+
+.cv-view-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #dde3ec;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.cv-view-tabs button {
+  background: transparent;
+  color: #52627d;
+}
+
+.cv-view-tabs button.active {
+  background: #e6edfc;
+  color: #1d469a;
+}
+
+.cv-preview {
+  background: #fff;
+  border: 1px solid #e0e5ee;
+  border-radius: 8px;
+  padding: 24px 28px;
+  max-height: 460px;
+  overflow: auto;
+  color: #172033;
+}
+
+.cv-preview-name {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #213b70;
+}
+
+.cv-preview-contact {
+  margin: 4px 0 0;
+  color: #657188;
+  font-size: 0.85rem;
+}
+
+.cv-preview-section {
+  margin-top: 20px;
+}
+
+.cv-preview-section h2 {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e1e6ef;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #3157a6;
+}
+
+.cv-preview-entry {
+  margin-top: 12px;
+}
+
+.cv-preview-entry-heading {
+  margin: 0;
+  font-weight: 700;
+}
+
+.cv-preview-entry-period {
+  font-weight: 400;
+  color: #657188;
+}
+
+.cv-preview ul {
+  margin: 6px 0;
+  padding-left: 1.2rem;
+}
+
+.cv-preview li {
+  margin: 4px 0;
+  line-height: 1.5;
+}

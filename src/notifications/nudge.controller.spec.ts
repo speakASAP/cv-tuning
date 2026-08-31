@@ -85,6 +85,18 @@ describe('POST /api/nudges/outcome', () => {
     expect(client.sendOutcomeNudge).not.toHaveBeenCalled();
   });
 
+  it('raises when the callback payload is missing or malformed', async () => {
+    const { controller, client } = buildController({ application: null });
+
+    await expect(controller.outcomeNudge('shhh', null as any)).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(controller.outcomeNudge('shhh', undefined as any)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(client.sendOutcomeNudge).not.toHaveBeenCalled();
+  });
+
   it('raises when the callback carries no applicationId', async () => {
     const { controller } = buildController({ application: null });
 

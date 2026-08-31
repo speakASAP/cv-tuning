@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CvFactEntity } from '../master/entities/cv-fact.entity';
@@ -692,7 +698,14 @@ export class ApplicationsService {
         `export failed for approved application ${applicationId}: ${message}; ` +
           'recoverable via POST :id/retry-export',
       );
-      throw cause;
+      // A plain `Error` here reaches Nest's default filter as a bare, message-less 500 —
+      // exactly the case the approval WAS recorded but the person sees only "Internal Server
+      // Error" with no way to know the CV is safe and retry-export exists. Wrapped so the
+      // real, actionable reason (e.g. an unsupported PDF character) reaches the response body.
+      throw new UnprocessableEntityException(
+        `application ${applicationId} was approved, but export failed: ${message}. ` +
+          'Retry the export from the application once the underlying issue is addressed.',
+      );
     }
 
     // Clearing the marker only once export has actually succeeded is what makes
@@ -777,7 +790,11 @@ export class ApplicationsService {
       const message = cause instanceof Error ? cause.message : String(cause);
       await this.applications.update(applicationId, { stateError: `export failed: ${message}` });
       this.logger.error(`export retry failed for application ${applicationId}: ${message}`);
-      throw cause;
+      // Same reasoning as `approve()`: a bare `Error` here becomes a message-less 500, hiding
+      // the actionable reason from the person retrying the export.
+      throw new UnprocessableEntityException(
+        `export retry failed for application ${applicationId}: ${message}`,
+      );
     }
 
     await this.applications.update(applicationId, { stateError: null });
