@@ -17,6 +17,7 @@ import {
   ConfirmedClaim,
   FactSnapshot,
   InputMode,
+  Outcome,
   RenderProvenance,
   TailoredBullet,
 } from './application.types';
@@ -49,6 +50,28 @@ export interface RenderView {
   /** Bullets needing a confirm-or-drop decision from the user (§6 layer 3). */
   needsConfirmation: TailoredBullet[];
 }
+
+/**
+ * One row of the applications list. Deliberately flat and explicit rather than the entity:
+ * the client needs the job's identity to tell two applications apart, and the entity carries
+ * neither that nor a safe boundary (see MasterCvController's CurrentMasterView for the same
+ * reasoning).
+ */
+export interface ApplicationListItem {
+  id: string;
+  jobId: string;
+  jobTitle: string | null;
+  jobCompany: string | null;
+  state: ApplicationState;
+  stateError: string | null;
+  outcome: Outcome | null;
+  renderLanguage: string;
+  revisionCount: number;
+  createdAt: Date;
+}
+
+/** A stored render plus the claims still awaiting a decision on it. */
+export type RenderListItem = CvRenderEntity & { needsConfirmation: TailoredBullet[] };
 
 export interface DiffView {
   revisionNo: number;
@@ -213,17 +236,60 @@ export class ApplicationsService {
     }
   }
 
-  async list(userId: string): Promise<CvApplicationEntity[]> {
-    return this.applications.find({ where: { userId }, order: { createdAt: 'DESC' } });
+  /**
+   * Applications carry no name of their own, so a list of them rendered from entity fields
+   * alone reads as a column of identical states (in_review, in_review, ...) with nothing
+   * to tell one application from another. The position is what the user recognises, so the
+   * job's title and company are resolved here rather than left to the client: the client has
+   * no way to join them without fetching every job separately.
+   *
+   * Jobs are fetched once and indexed, not looked up per application.
+   */
+  async list(userId: string): Promise<ApplicationListItem[]> {
+    const [applications, jobs] = await Promise.all([
+      this.applications.find({ where: { userId }, order: { createdAt: 'DESC' } }),
+      this.jobs.list(userId),
+    ]);
+
+    const byId = new Map(jobs.map((job) => [job.id, job]));
+
+    return applications.map((application) => {
+      const job = byId.get(application.jobId);
+      return {
+        id: application.id,
+        jobId: application.jobId,
+        // Null rather than a placeholder string: "is this position named?" is the client's
+        // decision to render, and a fabricated title would be indistinguishable from a real one.
+        jobTitle: job?.title ?? null,
+        jobCompany: job?.company ?? null,
+        state: application.state,
+        stateError: application.stateError,
+        outcome: application.outcome,
+        renderLanguage: application.renderLanguage,
+        revisionCount: application.revisionCount,
+        createdAt: application.createdAt,
+      };
+    });
   }
 
   async get(userId: string, applicationId: string): Promise<CvApplicationEntity> {
     return this.findOwned(userId, applicationId);
   }
 
-  async listRenders(userId: string, applicationId: string): Promise<CvRenderEntity[]> {
+  /**
+   * Renders carry `needsConfirmation` alongside the entity fields, so a client never has to
+   * work out which claims are still open by reading `verdict` - which cannot answer it, since
+   * a confirmed bullet keeps `verdict: 'overreach'` and only `confirmedOverreach` records the
+   * decision. Spread flat rather than nested so `revisionNo`/`markdown` stay where callers
+   * already read them.
+   */
+  async listRenders(userId: string, applicationId: string): Promise<RenderListItem[]> {
     await this.findOwned(userId, applicationId);
-    return this.renders.find({ where: { applicationId }, order: { revisionNo: 'ASC' } });
+    const renders = await this.renders.find({
+      where: { applicationId },
+      order: { revisionNo: 'ASC' },
+    });
+    return renders.map((render) => ({ ...render, needsConfirmation: this.toView(render).needsConfirmation }));
   }
 
   /** Diffs a revision against its predecessor, or against the master CV for revision 1. */
@@ -484,6 +550,18 @@ export class ApplicationsService {
     if (target.verdict !== 'overreach') {
       throw new ConflictException(
         `bullet is "${target.verdict}", not "overreach"; it needs no confirm-or-drop decision`,
+      );
+    }
+
+    // A confirmation carries the bullet forward unchanged, so the bullet stays `overreach`
+    // in the next render and looks undecided to anything reading `verdict` alone. Without
+    // this guard a second press of the same button produced a second revision that differed
+    // from its predecessor in nothing but the audit row - a user could stack revisions by
+    // clicking, and the diff between them was empty. Resolved through decidedBulletIds so a
+    // legacy text-only claim counts too, exactly as the approval gate resolves it.
+    if (decidedBulletIds(source.confirmedOverreach, source.provenance.bullets).has(bulletId)) {
+      throw new ConflictException(
+        `claim "${target.text}" has already been decided on revision ${revisionNo}; it needs no second decision`,
       );
     }
 
@@ -945,14 +1023,24 @@ export class ApplicationsService {
   }
 
   private toView(render: CvRenderEntity): RenderView {
+    // Coalesced: a render just returned from save() carries no `confirmedOverreach` until the
+    // column default is read back, and a first render has no decisions by definition. Reading
+    // it raw threw inside decidedBulletIds and took the whole generate() call down with it.
+    const decided = decidedBulletIds(render.confirmedOverreach ?? [], render.provenance.bullets);
     return {
       render,
       // `bulletId` is projected on rather than read raw: a render stored before the field
       // existed carries none, and the client cannot post a confirm-or-drop decision without
       // one. Derived through the same helper the service resolves with, so the id the UI
       // sends back is guaranteed to match.
+      // Already-decided bullets are excluded, not just non-supported ones. A confirmed
+      // bullet keeps `verdict: 'overreach'` forever - the decision lives in
+      // `confirmedOverreach`, not on the bullet - so filtering on verdict alone kept
+      // offering the user a decision they had already made, and every press minted another
+      // revision. This is the same resolution the approval gate uses.
       needsConfirmation: render.provenance.bullets
         .filter((b) => b.verdict !== 'supported')
+        .filter((b) => !decided.has(bulletIdOf(b)))
         .map((b) => ({ ...b, bulletId: bulletIdOf(b) })),
     };
   }

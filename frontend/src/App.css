@@ -78,3 +78,22 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* A decision the user already made, shown where its buttons used to be. Leaving the buttons
+   there implied the claim was still open and invited a second press, which minted a
+   revision each time. */
+.claim-decided {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #15803d;
+  font-size: 0.85rem;
+}
+
+/* The state now reads as words next to the position, so it must not shout like an id. */
+.application-list .application span {
+  color: #64748b;
+  font-size: 0.8rem;
+}

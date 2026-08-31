@@ -117,6 +117,38 @@ describe('ApplicationsService.confirmClaim', () => {
     expect(rows).toHaveLength(3);
   });
 
+  it('refuses a second decision on a claim the user already ruled on', async () => {
+    const { service, rows } = makeService();
+
+    const first = await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
+    expect(first.render.revisionNo).toBe(2);
+
+    // Confirming carries the bullet forward unchanged, so it is still `overreach` on
+    // revision 2 and a verdict-only reading of the render says it needs deciding again.
+    // Pressing the button twice used to mint a revision per press, each identical to the
+    // last but for the audit row.
+    await expect(
+      service.confirmClaim('u1', 'app-1', 2, bulletIdOf(OVERREACH_A), 'confirm'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(rows).toHaveLength(2);
+  });
+
+  it('stops offering a decided claim for decision, while still offering the undecided one', async () => {
+    const { service } = makeService();
+
+    const after = await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
+
+    // The confirmed bullet is still present and still `overreach` - the decision lives in
+    // the audit trail, not on the bullet - so this is exactly the case a client filtering on
+    // `verdict` alone gets wrong.
+    expect(after.render.provenance.bullets.map((b) => b.text)).toContain(OVERREACH_A.text);
+
+    const offered = after.needsConfirmation.map((b) => b.text);
+    expect(offered).not.toContain(OVERREACH_A.text);
+    expect(offered).toContain(OVERREACH_B.text);
+  });
+
   it('rejects a confirm-claim call against a revision that is no longer the latest, naming the real latest', async () => {
     const { service } = makeService();
 
