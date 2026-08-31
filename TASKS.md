@@ -2,16 +2,13 @@
 
 This file is the concise human-readable work queue. Detailed task contracts live under `docs/11_tasks/`; execution plans and validation reports remain linked from those task documents.
 
-## active
-
+## Active
 - No active tasks at this time.
 
-## ready next
-
+## Ready Next
 - No immediate follow-up tasks are queued.
 
-## blocked
-
+## Blocked
 - No blocked tasks at this time.
 
 ## completed
