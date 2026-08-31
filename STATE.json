@@ -18,7 +18,12 @@
     "Run the deployment preflight when the repo is ready for rollout.",
     "Replace deferred compliance references only with authoritative owner-approved sources."
   ],
-  "service": "cv-tuning",
+  "service": {
+    "name": "cv-tuning",
+    "kind": "service",
+    "lifecycle": "planning-validated",
+    "deployment": "kubernetes"
+  },
   "port": 3379,
   "updated": "2026-08-30",
   "branch": "main",
@@ -89,5 +94,26 @@
     "Offboarding reconciliation is wired to auth-microservice protected existence-only endpoint; it still never deletes on a timeout, transport failure, or any response other than a confirmed 404.",
     "Premium benchmark and pricing remain deferred until the funded production rollout; development continues on cheap|smart only",
     "The grounding baseline remains a live validation record and should be reviewed before any prompt change."
-  ]
+  ],
+  "schema_version": "1.0",
+  "repository": "cv-tuning",
+  "planning": {
+    "status": "active",
+    "active_goal_ids": [],
+    "next_ready_goal_ids": [],
+    "blocked_goal_ids": [],
+    "active_workstream_ids": [],
+    "last_updated_at": "2026-08-30T00:00:00Z"
+  },
+  "delivery": {
+    "last_validation_id": null,
+    "last_validation_status": null,
+    "validation_debt_count": 0,
+    "last_deployment_commit": null
+  },
+  "collection": {
+    "profile": "service",
+    "artifact_index": "docs/registry/ARTIFACT_INDEX.json",
+    "status_source": "human-and-agent-maintained; legacy state retained during Wave contract adoption"
+  }
 }

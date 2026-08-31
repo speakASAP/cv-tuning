@@ -1,3 +1,9 @@
+---
+status: review
+owner: repository-owner
+last_updated: 2026-08-31
+---
+
 # CV Tuning Phase 7 Implementation Plan — GDPR
 
 > **For agentic workers:** this plan documents the Phase 7 GDPR gate as built. Foundations
