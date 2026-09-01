@@ -7,9 +7,14 @@ This file is the concise human-readable work queue. Detailed task contracts live
 
 ## Ready Next
 - No immediate follow-up tasks are queued.
+- Complete implementation validation with the project-level test commands.
+- Run the deployment preflight when the repo is ready for rollout.
+- Replace deferred compliance references only with authoritative owner-approved sources.
 
 ## Blocked
 - No blocked tasks at this time.
+- Public third-party onboarding remains blocked until consent and GDPR enforcement are complete.
+- Authoritative DPA references for external providers remain pending owner approval.
 
 ## completed
 

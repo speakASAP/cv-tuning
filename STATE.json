@@ -1,100 +1,10 @@
 {
-  "schemaVersion": 1,
-  "project": "cv-tuning",
-  "lifecycle": "planning-validated",
-  "health": "adoption-gate-passed",
-  "activeTask": "TASK-001-bootstrap-service",
-  "lastUpdated": "2026-08-30",
-  "deployment": {
-    "status": "preflight-ready",
-    "notes": "Validated adoption baseline; deployment remains subject to explicit approval and the shared deploy queue."
-  },
-  "blockers": [
-    "Public third-party onboarding remains blocked until consent and GDPR enforcement are complete.",
-    "Authoritative DPA references for external providers remain pending owner approval."
-  ],
-  "followUps": [
-    "Complete implementation validation with the project-level test commands.",
-    "Run the deployment preflight when the repo is ready for rollout.",
-    "Replace deferred compliance references only with authoritative owner-approved sources."
-  ],
   "service": {
     "name": "cv-tuning",
     "kind": "service",
     "lifecycle": "planning-validated",
     "deployment": "kubernetes"
   },
-  "port": 3379,
-  "updated": "2026-08-30",
-  "branch": "main",
-  "lastCommit": "26ffe25",
-  "gate": "Phase 7 (GDPR) core landed: consent enforcement, export, hard-delete cascade, retention, and auth-backed offboarding reconciliation. Third-party users are gated on current consent.",
-  "models": "Development uses existing free tiers only (cheap|smart). Premium is deferred until the funded production rollout and remains per-call human-approved.",
-  "phases": {
-    "0": {
-      "status": "done",
-      "what": "BPCP workflow executor (instances, wait-for-signal, row locking)",
-      "repo": "business-process-control-plane"
-    },
-    "1": {
-      "status": "done",
-      "what": "Scaffold, auth guard, master CV import, MD/fact graph, drift detector"
-    },
-    "2": {
-      "status": "done",
-      "what": "JD ingest (SSRF-guarded fetcher, paste fallback), requirement parser, fit scorer with citation validation"
-    },
-    "3": {
-      "status": "done",
-      "what": "Tailoring (constrained generation) + entailment validator + ai-tell + word-level diff + eval harness"
-    },
-    "4": {
-      "status": "done",
-      "what": "Voice revision loop, approve, PDF/DOCX export"
-    },
-    "5": {
-      "status": "done",
-      "what": "Dashboard, outcome tracking, BPCP-timed nudges"
-    },
-    "6": {
-      "status": "done",
-      "what": "Cover letters, screening answers, proof-of-work surfacing"
-    },
-    "7": {
-      "status": "done",
-      "what": "GDPR: pseudonymization, consent + enforcement, delete-cascade, export, retention, and fail-safe auth-backed offboarding reconciliation"
-    },
-    "8": {
-      "status": "blocked",
-      "what": "Cheap/smart benchmark completed 2026-08-30 on five consented external CV fixtures: cheap 5/5 (21 supported, 1 overreach), smart 5/5 (21 supported, 0 overreach). Premium comparison is deferred until the funded production rollout; the development LiteLLM router intentionally does not expose premium."
-    },
-    "9": {
-      "status": "blocked",
-      "what": "Premium enablement, only if Phase 8 justifies it"
-    },
-    "10": {
-      "status": "blocked",
-      "what": "Billing / pricing / tiers via payments-microservice"
-    }
-  },
-  "tests": {
-    "suites": 63,
-    "cases": 719,
-    "passed": 708,
-    "skipped": 11,
-    "command": "npm test",
-    "note": "11 skipped are integration tests needing a live Postgres; a higher skip count means a regression"
-  },
-  "docs": {
-    "spec": "docs/specs/2026-08-22-cv-tailoring-platform-design.md",
-    "plans": "docs/superpowers/plans/"
-  },
-  "openItems": [
-    "JWKS exception request for local token verification (spec 3.2)",
-    "Offboarding reconciliation is wired to auth-microservice protected existence-only endpoint; it still never deletes on a timeout, transport failure, or any response other than a confirmed 404.",
-    "Premium benchmark and pricing remain deferred until the funded production rollout; development continues on cheap|smart only",
-    "The grounding baseline remains a live validation record and should be reviewed before any prompt change."
-  ],
   "schema_version": "1.0",
   "repository": "cv-tuning",
   "planning": {
