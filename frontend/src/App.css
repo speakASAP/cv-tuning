@@ -121,6 +121,21 @@
   flex-wrap: wrap;
 }
 
+/* Stays visible above whichever of Preview/Markdown/Diff is active, so the position a CV is
+   for is never ambiguous - the CV content itself always starts with the candidate own name,
+   which this line is not a substitute for. */
+.cv-view-position {
+  margin: 0 0 10px;
+  font-weight: 650;
+  color: #1d469a;
+}
+
+/* The claims column only exists when there is something to decide; when it is not rendered at
+   all, the CV view should use the freed-up width instead of leaving it empty. */
+.review-grid-single {
+  grid-template-columns: 1fr;
+}
+
 .cv-view-tabs button {
   background: transparent;
   color: #52627d;
