@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { join } from 'path';
-import * as fontkit from 'fontkit';
 import PDFDocument = require('pdfkit');
 import {
   CvDocument,
@@ -9,6 +7,7 @@ import {
   renderToDocument,
   renderToSupplementDocument,
 } from './cv-document';
+import { registerFontFamilies, unsupportedClusters, writeRun, segment } from './rich-text';
 
 export interface RenderedFile {
   content: Buffer;
@@ -17,35 +16,9 @@ export interface RenderedFile {
   filename: string;
 }
 
-/**
- * DejaVu Sans (permissive licence, see fonts/DejaVuSans-LICENSE.txt), embedded rather than
- * one of pdfkit's Standard-14 fonts. Standard-14 fonts (Helvetica etc.) only encode WinAnsi
- * (CP1252), which silently corrupted every non-Latin-1 character — CJK, Cyrillic, and even
- * ordinary Czech/Polish diacritics — into garbage glyph ids. DejaVu Sans covers Latin
- * Extended, Cyrillic, Greek, and general punctuation, which is the vast majority of real CV
- * content; only genuinely out-of-scope scripts (CJK, emoji, RTL) still need DOCX.
- */
-const FONT_REGULAR_PATH = join(__dirname, 'fonts', 'DejaVuSans.ttf');
-const FONT_BOLD_PATH = join(__dirname, 'fonts', 'DejaVuSans-Bold.ttf');
-const FONT_REGULAR_NAME = 'DejaVuSans';
-const FONT_BOLD_NAME = 'DejaVuSans-Bold';
-
-// Opened once and reused: fontkit parses the whole glyph table on open, and every render and
-// every encodability check needs it, so re-opening per call would be a needless repeated cost.
-let cachedRegularFont: fontkit.Font | undefined;
-function regularFont(): fontkit.Font {
-  if (!cachedRegularFont) cachedRegularFont = fontkit.openSync(FONT_REGULAR_PATH) as fontkit.Font;
-  return cachedRegularFont;
-}
-
-/**
- * Whether the embedded font has a real glyph -- not the ".notdef" placeholder -- for a code
- * point. This is the authoritative "can this font render this character" answer for whichever
- * font is actually embedded, replacing a hand-copied WinAnsi table that only ever described
- * Helvetica.
- */
-function hasGlyph(codePoint: number): boolean {
-  return regularFont().glyphForCodePoint(codePoint).id !== 0;
+/** Checks whether any text segment(s) would need pdfkit's manual, image-aware layout path. */
+function hasEmoji(...values: (string | null | undefined)[]): boolean {
+  return values.some((value) => value != null && segment(value).some((entry) => entry.kind === 'image'));
 }
 
 /**
@@ -83,8 +56,7 @@ export class CvPdfService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.registerFont(FONT_REGULAR_NAME, FONT_REGULAR_PATH);
-      doc.registerFont(FONT_BOLD_NAME, FONT_BOLD_PATH);
+      registerFontFamilies(doc);
       this.write(doc, document);
       doc.end();
     });
@@ -101,11 +73,11 @@ export class CvPdfService {
    * pdfkit's own `font.encode` happily returns a bogus glyph id for a code point the embedded
    * font has no glyph for, instead of throwing (verified directly, not assumed). A "successful"
    * render that has silently corrupted the candidate's name is exactly the failure class this
-   * codebase forbids, so every character is checked against DejaVu Sans's real glyph table up
-   * front and raised loudly before any PDF bytes are written, naming the offending characters.
-   * DOCX already renders this content correctly (docx/OOXML is UTF-8 native), so the message
-   * names that path — the failure is fully recoverable the same second it happens. Remaining
-   * gaps (CJK, emoji, RTL scripts) are a font-coverage decision, not something to guess at here.
+   * codebase forbids, so every character is checked up front, against every embedded font
+   * (Latin, CJK, Arabic, Hebrew) and the emoji raster fallback, and raised loudly before any
+   * PDF bytes are written, naming the offending characters. `unsupportedClusters` (rich-text.ts)
+   * is the exact same segmentation `write()` uses to render, so this check and the renderer can
+   * never silently disagree about what is and is not supported.
    */
   private assertEncodable(cv: CvDocument): void {
     const strings = [
@@ -125,11 +97,8 @@ export class CvPdfService {
 
     const unsupported = new Set<string>();
     for (const value of strings) {
-      for (const char of value) {
-        const codePoint = char.codePointAt(0);
-        if (codePoint !== undefined && !hasGlyph(codePoint)) {
-          unsupported.add(char);
-        }
+      for (const cluster of unsupportedClusters(value)) {
+        unsupported.add(cluster);
       }
     }
 
@@ -143,13 +112,15 @@ export class CvPdfService {
   }
 
   private write(doc: PDFKit.PDFDocument, cv: CvDocument): void {
-    doc.fontSize(20).font(FONT_BOLD_NAME).text(cv.contact.name);
+    writeRun(doc, cv.contact.name, { size: 20, bold: true });
     if (cv.contact.parts.length > 0) {
-      doc.moveDown(0.3).fontSize(10).font(FONT_REGULAR_NAME).text(cv.contact.parts.join('  ·  '));
+      doc.moveDown(0.3);
+      writeRun(doc, cv.contact.parts.join('  ·  '), { size: 10 });
     }
 
     for (const section of cv.sections) {
-      doc.moveDown(1).fontSize(13).font(FONT_BOLD_NAME).text(section.heading.toUpperCase());
+      doc.moveDown(1);
+      writeRun(doc, section.heading.toUpperCase(), { size: 13, bold: true });
       doc.moveTo(50, doc.y + 2).lineTo(545, doc.y + 2).stroke();
       doc.moveDown(0.5);
 
@@ -161,17 +132,23 @@ export class CvPdfService {
         // value is ever borrowed from another entry to fill one in.
         const heading = [entry.title, entry.org].filter(Boolean).join(' — ');
         if (heading) {
-          doc.fontSize(11).font(FONT_BOLD_NAME).text(heading, { continued: Boolean(entry.period) });
+          // pdfkit's own `continued` text run cannot resume correctly after a call that used
+          // the manual, image-aware layout path (see rich-text.ts) — its internal notion of
+          // "current position" is only meaningful between two ordinary `doc.text()` calls. An
+          // emoji in a job title/company is vanishingly rare, so that combination falls back
+          // to two independent lines instead, which never overlaps or misplaces text.
+          const canChain = entry.period ? !hasEmoji(heading, entry.period) : true;
+          writeRun(doc, heading, { size: 11, bold: true, continued: canChain && Boolean(entry.period) });
           if (entry.period) {
-            doc.font(FONT_REGULAR_NAME).fontSize(10).text(`  (${entry.period})`);
+            writeRun(doc, canChain ? `  (${entry.period})` : `(${entry.period})`, { size: 10 });
           }
         } else if (entry.period) {
           // A period with neither title nor org is real information the user's master CV
           // stated; printing it alone is honest, dropping it is a silent loss.
-          doc.fontSize(10).font(FONT_REGULAR_NAME).text(`(${entry.period})`);
+          writeRun(doc, `(${entry.period})`, { size: 10 });
         }
         for (const bullet of entry.bullets) {
-          doc.fontSize(10).font(FONT_REGULAR_NAME).text(`• ${bullet}`, { indent: 10 });
+          writeRun(doc, `• ${bullet}`, { size: 10, indent: 10 });
         }
         doc.moveDown(0.4);
       }
@@ -200,8 +177,7 @@ export class CvPdfService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.registerFont(FONT_REGULAR_NAME, FONT_REGULAR_PATH);
-      doc.registerFont(FONT_BOLD_NAME, FONT_BOLD_PATH);
+      registerFontFamilies(doc);
       this.writeSupplement(doc, document);
       doc.end();
     });
@@ -224,11 +200,8 @@ export class CvPdfService {
 
     const unsupported = new Set<string>();
     for (const value of strings) {
-      for (const char of value) {
-        const codePoint = char.codePointAt(0);
-        if (codePoint !== undefined && !hasGlyph(codePoint)) {
-          unsupported.add(char);
-        }
+      for (const cluster of unsupportedClusters(value)) {
+        unsupported.add(cluster);
       }
     }
 
@@ -242,23 +215,24 @@ export class CvPdfService {
   }
 
   private writeSupplement(doc: PDFKit.PDFDocument, document: SupplementDocument): void {
-    doc.fontSize(20).font(FONT_BOLD_NAME).text(document.title);
+    writeRun(doc, document.title, { size: 20, bold: true });
     if (document.contactParts.length > 0) {
-      doc.moveDown(0.3).fontSize(10).font(FONT_REGULAR_NAME).text(document.contactParts.join('  ·  '));
+      doc.moveDown(0.3);
+      writeRun(doc, document.contactParts.join('  ·  '), { size: 10 });
     }
 
     for (const block of document.blocks) {
       if (block.heading) {
-        doc.moveDown(1).fontSize(12).font(FONT_BOLD_NAME).text(block.heading);
+        doc.moveDown(1);
+        writeRun(doc, block.heading, { size: 12, bold: true });
         doc.moveDown(0.3);
       } else {
         doc.moveDown(0.8);
       }
       for (const paragraph of block.paragraphs) {
-        doc.fontSize(10).font(FONT_REGULAR_NAME).text(paragraph);
+        writeRun(doc, paragraph, { size: 10 });
         doc.moveDown(0.4);
       }
     }
   }
-
 }

@@ -70,11 +70,42 @@ describe('CvPdfService', () => {
     await expect(new CvPdfService().render('   ', 'x')).rejects.toThrow(/empty/i);
   });
 
-  it('raises rather than silently corrupting a name pdfkit\'s font cannot encode', async () => {
+  it('renders a CJK name in the extractable text layer instead of raising (fonts now cover it)', async () => {
     const CV_CJK_NAME = '# 王小明\n\n## Experience\n### Dev — Acme (2020)\n- Ran PostgreSQL';
-    await expect(new CvPdfService().render(CV_CJK_NAME, 'x')).rejects.toThrow(
-      /does not yet support these characters.*王.*export DOCX instead/is,
-    );
+    const { content } = await new CvPdfService().render(CV_CJK_NAME, 'x');
+    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+    const text = extractPdfText(content);
+    expect(text).toContain('王小明');
+    expect(text).toContain('Ran PostgreSQL');
+  });
+
+  it('renders Hebrew text (RTL) without raising, in visual rather than logical order', async () => {
+    // No PDF ActualText/logical-order layer is implemented, so extracted text comes back
+    // in visual (rendered left-to-right glyph) order, not logical reading order. That is
+    // the accepted tradeoff for this feature, not a bug — this test asserts the individual
+    // Hebrew letters made it into the text layer at all, not their reading-order sequence.
+    const CV_HEBREW = '# משה כהן\n\n## Experience\n### Dev — Acme (2020)\n- Ran PostgreSQL';
+    const { content } = await new CvPdfService().render(CV_HEBREW, 'x');
+    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+    const text = extractPdfText(content);
+    for (const letter of ['מ', 'ש', 'ה', 'כ', 'ה', 'ן']) {
+      expect(text).toContain(letter);
+    }
+  });
+
+  it('renders a bullet containing an emoji without raising (rasterized as an embedded image)', async () => {
+    const CV_EMOJI = '# Jane Doe\n\n## Experience\n### Dev — Acme (2020)\n- Shipped the release 🚀';
+    const { content } = await new CvPdfService().render(CV_EMOJI, 'x');
+    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+    // Emoji are drawn as embedded raster images (pdfkit/fontkit cannot embed color-glyph
+    // fonts), so the PDF object stream must contain an Image XObject alongside the text.
+    expect(content.toString('latin1')).toContain('/Image');
+    // The emoji path draws each word as its own positioned text call (manual layout, so it
+    // can interleave `doc.image()` calls between words), rather than one flowed pdfkit text
+    // run -- pdf-parse has no inter-call space heuristic for that, so words land without
+    // separating whitespace in the extracted layer. Assert word presence, not spacing.
+    const text = extractPdfText(content).replace(/\s+/g, '');
+    expect(text).toContain('Shippedtherelease');
   });
 
   it('renders Czech and Cyrillic diacritics that the old WinAnsi-only Helvetica font could not', async () => {

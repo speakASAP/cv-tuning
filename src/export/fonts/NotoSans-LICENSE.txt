@@ -1,0 +1,17 @@
+Noto Sans CJK, Noto Sans Arabic, and Noto Sans Hebrew (this directory:
+NotoSansCJK-*.ttf, NotoSansArabic-*.ttf, NotoSansHebrew-*.ttf) are distributed
+by Google under the SIL Open Font License, Version 1.1, the same permissive,
+embeddable licence as DejaVu Sans (see DejaVuSans-LICENSE.txt in this
+directory).
+
+Copyright 2010-2020 Google Inc / Google LLC.
+Source: https://github.com/googlei18n/noto-fonts
+
+NotoSansCJK-*.ttf here is a single-face (Simplified Chinese, which fully
+covers Han, Hiragana, Katakana, and Hangul, per Unicode Han unification)
+extraction and Latin-1/CJK/Hangul-range subset of the upstream
+NotoSansCJK-Regular.ttc / NotoSansCJK-Bold.ttc collection, produced with
+fontTools (pyftsubset) to keep the embedded font size reasonable; the
+subsetting tool and process do not change the license.
+
+Full OFL 1.1 text: https://openfontlicense.org/open-font-license-official-text/

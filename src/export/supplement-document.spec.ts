@@ -101,9 +101,9 @@ describe('supplement export: one model, two writers', () => {
     expect(docx.content.length).toBeGreaterThan(0);
   });
 
-  it('raises on an unencodable character in a supplement and points at DOCX', async () => {
-    // Reuses the CV path's existing behaviour untouched: a "successful" PDF that silently
-    // corrupted the candidate's name is the failure class this codebase forbids.
+  it('renders a CJK character in a supplement PDF instead of raising (fonts now cover it)', async () => {
+    // Reuses the CV path's fixed behaviour: CJK now renders through a fallback font
+    // instead of the old "does not yet support these characters" DOCX-only error.
     const cjk = buildCoverLetterMarkdown({
       candidateName: '简历',
       contactLine: null,
@@ -113,7 +113,8 @@ describe('supplement export: one model, two writers', () => {
       language: 'en',
     });
 
-    await expect(new CvPdfService().renderSupplement(cjk, 'x')).rejects.toThrow(/DOCX instead/);
+    const file = await new CvPdfService().renderSupplement(cjk, 'x');
+    expect(file.content.subarray(0, 5).toString()).toBe('%PDF-');
   });
 
   it('renders the same character set in DOCX that PDF refuses', async () => {
