@@ -173,12 +173,12 @@ describe('ApplicationsService.confirmClaim', () => {
     expect(renders.save).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects confirming a claim once the application has left in_review (e.g. approved)', async () => {
-    const { service } = makeService({ state: 'approved' });
+  it('allows a decision from approved and returns the application to in_review', async () => {
+    const { service, applications } = makeService({ state: 'approved' });
 
-    await expect(service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm')).rejects.toThrow(
-      /approved/,
-    );
+    await service.confirmClaim('u1', 'app-1', 1, bulletIdOf(OVERREACH_A), 'confirm');
+
+    expect(applications.update).toHaveBeenCalledWith('app-1', { state: 'in_review', stateError: null });
   });
 
   it('404s a confirm-claim call for a revision that does not exist', async () => {

@@ -24,6 +24,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { MarkSentDto } from './dto/mark-sent.dto';
 import { RecordOutcomeDto } from './dto/record-outcome.dto';
 import { ReviseDto } from './dto/revise.dto';
+import { EditRenderDto } from './dto/edit-render.dto';
 
 interface AuthedRequest {
   user: CvUser;
@@ -81,6 +82,15 @@ export class ApplicationsController {
     @Body() body: ReviseDto,
   ) {
     return this.applications.revise(req.user.id, id, body.instruction, body.inputMode);
+  }
+
+  @Post(':id/edit')
+  async edit(
+    @Req() req: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: EditRenderDto,
+  ) {
+    return this.applications.edit(req.user.id, id, body.markdown);
   }
 
   @Get(':id/chat')

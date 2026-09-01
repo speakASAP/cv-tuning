@@ -275,24 +275,23 @@ describe('ApplicationsService', () => {
     await expect(service.regenerate('intruder', 'row1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('diffs revision 1 against the master markdown', async () => {
+  it('reports no diff before the first approval rather than comparing unapproved revisions', async () => {
     const { service } = build();
 
     await service.create('u1', 'j1');
     const diff = await service.diff('u1', 'row1', 1);
 
-    expect(diff.baselineRevisionNo).toBeNull();
-    expect(diff.hunks.length).toBeGreaterThan(0);
+    expect(diff).toEqual({ revisionNo: 1, baselineRevisionNo: null, noBaseline: true, hunks: [] });
   });
 
-  it('diffs revision 2 against revision 1', async () => {
+  it('reports no diff for later revisions before the first approval', async () => {
     const { service } = build();
 
     await service.create('u1', 'j1');
     await service.regenerate('u1', 'row1');
     const diff = await service.diff('u1', 'row1', 2);
 
-    expect(diff.baselineRevisionNo).toBe(1);
+    expect(diff).toEqual({ revisionNo: 2, baselineRevisionNo: null, noBaseline: true, hunks: [] });
   });
 
   it('404s a revision that does not exist', async () => {

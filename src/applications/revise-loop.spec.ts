@@ -5,6 +5,7 @@ import { ApplicationsService } from './applications.service';
 function makeService(overrides: {
   state?: string;
   revisionCount?: number;
+  approvedRevisionNo?: number | null;
   reviseImpl?: jest.Mock;
   /** Turns this user has already spent in the current rate-limit window. */
   recentTurns?: number;
@@ -16,16 +17,23 @@ function makeService(overrides: {
     masterVersionId: 'mv-1',
     state: overrides.state ?? 'in_review',
     revisionCount: overrides.revisionCount ?? 0,
+    approvedRevisionNo: overrides.approvedRevisionNo ?? null,
     renderLanguage: 'en',
   };
   const applications = {
     findOne: jest.fn().mockResolvedValue(application),
-    update: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockImplementation(async (_id, patch) => Object.assign(application, patch)),
   };
+  const rows: Record<string, unknown>[] = [{
+    id: 'r1', applicationId: 'app-1', revisionNo: 1, markdown: '- old', factsSnapshot: [],
+    provenance: { bullets: [], droppedBullets: [] }, confirmedOverreach: [],
+  }];
   const renders = {
-    findOne: jest.fn().mockResolvedValue({ id: 'r1', revisionNo: 1, markdown: '- old' }),
-    find: jest.fn().mockResolvedValue([{ id: 'r1', revisionNo: 1, markdown: '- old' }]),
-    save: jest.fn().mockImplementation((r) => Promise.resolve({ ...r, id: 'r2' })),
+    findOne: jest.fn().mockImplementation(async ({ where }) => rows.find((row) =>
+      row.applicationId === where.applicationId && row.revisionNo === where.revisionNo,
+    ) ?? null),
+    find: jest.fn().mockImplementation(async () => [...rows].sort((a, b) => Number(b.revisionNo) - Number(a.revisionNo))),
+    save: jest.fn().mockImplementation(async (render) => { const row = { ...render, id: 'r' + (rows.length + 1) }; rows.push(row); return row; }),
   };
   // The rate limiter counts through a query builder, so the stub must be chainable.
   const chats = {
@@ -76,7 +84,7 @@ function makeService(overrides: {
     // Phase 5: not exercised here, but a real double so an unexpected call fails loudly.
     { startOutcomeWatch: jest.fn(), deliverSignal: jest.fn() } as never,
   );
-  return { service, applications, renders, chats, revise, entail };
+  return { service, applications, renders, chats, revise, entail, rows };
 }
 
 describe('ApplicationsService.revise', () => {
@@ -97,9 +105,16 @@ describe('ApplicationsService.revise', () => {
     await expect(service.revise('u1', 'app-1', 'x', 'text')).rejects.toThrow(/cap/i);
   });
 
-  it('rejects a revision from a state that cannot accept one, naming that state', async () => {
-    const { service } = makeService({ state: 'approved' });
-    await expect(service.revise('u1', 'app-1', 'x', 'text')).rejects.toThrow(/approved/);
+  it('allows a revision from approved, returns it to in_review, and diffs from its approval checkpoint', async () => {
+    const { service, applications, revise } = makeService({ state: 'approved', approvedRevisionNo: 1 });
+    const result = await service.revise('u1', 'app-1', 'x', 'text');
+    expect(revise.revise).toHaveBeenCalled();
+    expect(applications.update).toHaveBeenLastCalledWith(
+      'app-1', expect.objectContaining({ state: 'in_review' }),
+    );
+    const diff = await service.diff('u1', 'app-1', result.render.revisionNo);
+    expect(diff).toMatchObject({ baselineRevisionNo: 1, noBaseline: false });
+    expect(diff.hunks.length).toBeGreaterThan(0);
   });
 
   it('rejects a turn once the per-user rate limit is exhausted, distinctly from the cap', async () => {

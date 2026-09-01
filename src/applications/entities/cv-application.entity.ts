@@ -65,6 +65,14 @@ export class CvApplicationEntity {
   @Column({ type: 'timestamptz', nullable: true })
   approvedAt!: Date | null;
 
+  /**
+   * Immutable reference point for review diffs. A later edit returns the application to review,
+   * but the user needs to see what changed since the CV they last approved, not each internal
+   * intermediate revision that led there.
+   */
+  @Column({ type: 'int', nullable: true })
+  approvedRevisionNo!: number | null;
+
   /** Counts AI revision turns only, so the cap bounds model spend and nothing else. */
   @Column({ type: 'int', default: 0 })
   revisionCount!: number;

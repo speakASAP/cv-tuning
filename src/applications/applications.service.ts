@@ -81,8 +81,10 @@ export type RenderListItem = CvRenderEntity & { needsConfirmation: TailoredBulle
 
 export interface DiffView {
   revisionNo: number;
-  /** The revision this was diffed against; null means the master CV was the baseline. */
+  /** The last approved revision this was diffed against; null means none has been approved. */
   baselineRevisionNo: number | null;
+  /** A pre-approval render has no review checkpoint to compare against. */
+  noBaseline: boolean;
   hunks: DiffHunk[];
 }
 
@@ -298,44 +300,36 @@ export class ApplicationsService {
     return renders.map((render) => ({ ...render, needsConfirmation: this.toView(render).needsConfirmation }));
   }
 
-  /** Diffs a revision against its predecessor, or against the master CV for revision 1. */
+  /** Diffs a render against the CV checkpoint the user most recently approved. */
   async diff(userId: string, applicationId: string, revisionNo: number): Promise<DiffView> {
     const application = await this.findOwned(userId, applicationId);
-
     const render = await this.renders.findOne({ where: { applicationId, revisionNo } });
     if (!render) {
       throw new NotFoundException(`revision ${revisionNo} not found for application ${applicationId}`);
     }
 
-    if (revisionNo > 1) {
-      const previous = await this.renders.findOne({
-        where: { applicationId, revisionNo: revisionNo - 1 },
-      });
-      if (!previous) {
-        throw new Error(
-          `revision ${revisionNo} of application ${applicationId} has no revision ${revisionNo - 1} to diff against`,
-        );
-      }
-      return {
-        revisionNo,
-        baselineRevisionNo: previous.revisionNo,
-        hunks: diffLines(previous.markdown, render.markdown),
-      };
+    if (application.approvedRevisionNo == null) {
+      // Before the first approval there is no user-approved checkpoint. Comparing arbitrary
+      // generated revisions would look authoritative while answering a different question.
+      return { revisionNo, baselineRevisionNo: null, noBaseline: true, hunks: [] };
+    }
+    if (application.approvedRevisionNo >= revisionNo) {
+      return { revisionNo, baselineRevisionNo: application.approvedRevisionNo, noBaseline: true, hunks: [] };
     }
 
-    const pinned = await this.master.getVersion(userId, application.masterVersionId);
-    if (!pinned) {
-      throw new Error(
-        `application ${applicationId} pins master version ${application.masterVersionId}, which no longer exists`,
-      );
+    const approved = await this.renders.findOne({
+      where: { applicationId, revisionNo: application.approvedRevisionNo },
+    });
+    if (!approved) {
+      throw new Error(`application ${applicationId} records approved revision ${application.approvedRevisionNo}, which no longer exists`);
     }
-
-    // Spec §7: revision 1 is diffed against the master, so the first generation is
-    // reviewable as a diff rather than appearing from nowhere.
     return {
       revisionNo,
-      baselineRevisionNo: null,
-      hunks: diffLines(pinned.master.markdown, render.markdown),
+      baselineRevisionNo: approved.revisionNo,
+      noBaseline: false,
+      // The proven review boundary is the approved render, not revisionNo - 1: decisions and
+      // AI iterations between approvals are audit history, not the change a person is reviewing.
+      hunks: diffLines(approved.markdown, render.markdown),
     };
   }
 
@@ -357,7 +351,7 @@ export class ApplicationsService {
       throw new ConflictException(`application ${applicationId}: revision already in progress`);
     }
 
-    if (application.state !== 'in_review') {
+    if (application.state !== 'in_review' && application.state !== 'approved') {
       throw new ConflictException(
         `application ${applicationId} is in state ${application.state} and cannot be revised`,
       );
@@ -512,11 +506,9 @@ export class ApplicationsService {
   ): Promise<RenderView> {
     const application = await this.findOwned(userId, applicationId);
 
-    // Matches revise()/approve()'s state guard. Without it confirmClaim would happily append
-    // a render to an `approved` or `downloaded` application, producing a render newer than
-    // the artifact the user already reviewed and downloaded — the same spec §6.3 divergence
-    // Task 5's approve() guard exists to prevent, entered through this door instead.
-    if (application.state !== 'in_review') {
+    // An approved application may deliberately return to review for a new decision, but no
+    // terminal or in-progress state may mint a render through this path.
+    if (application.state !== 'in_review' && application.state !== 'approved') {
       throw new ConflictException(
         `application ${applicationId} is in state ${application.state}; claims can only be ` +
           'confirmed or dropped while the application is in_review',
@@ -619,10 +611,41 @@ export class ApplicationsService {
     } as unknown as CvRenderEntity;
 
     const saved = await this.renders.save(draft);
+    await this.applications.update(applicationId, { state: 'in_review', stateError: null });
     this.logger.log(
       `claim ${bulletId} "${target.text.slice(0, 60)}" ${decision === 'drop' ? 'dropped' : 'confirmed'} ` +
         `by ${userId} on ${applicationId}`,
     );
+    return this.toView(saved);
+  }
+
+  /**
+   * Saves prose authored directly by the person. This intentionally skips entailment: unlike an
+   * AI instruction, the product explicitly treats a user's own edit as trusted. Its existing
+   * evidence audit is carried forward unchanged rather than inventing unsupported provenance.
+   */
+  async edit(userId: string, applicationId: string, markdown: string): Promise<RenderView> {
+    const application = await this.findOwned(userId, applicationId);
+    if (application.state !== 'in_review' && application.state !== 'approved') {
+      throw new ConflictException(
+        `application ${applicationId} is in state ${application.state}; it can only be edited while in_review or approved`,
+      );
+    }
+    const renders = await this.renders.find({ where: { applicationId }, order: { revisionNo: 'DESC' } });
+    const latest = renders[0];
+    if (!latest) throw new ConflictException(`application ${applicationId} has no render to edit`);
+    const revisionNo = latest.revisionNo + 1;
+    const draft: CvRenderEntity = {
+      applicationId, revisionNo, markdown, factsSnapshot: latest.factsSnapshot,
+      provenance: latest.provenance, confirmedOverreach: latest.confirmedOverreach,
+      aiTellScore: scoreAiTell(markdown).score, createdBy: 'user', modelUsed: latest.modelUsed,
+      validatorModelUsed: latest.validatorModelUsed, requestedTier: latest.requestedTier,
+      degraded: latest.degraded, promptVersion: latest.promptVersion,
+      idempotencyKey: `${applicationId}:${revisionNo}`,
+    } as unknown as CvRenderEntity;
+    const saved = await this.renders.save(draft);
+    await this.applications.update(applicationId, { state: 'in_review', stateError: null });
+    this.logger.log(`manual edit created revision ${revisionNo} for application ${applicationId}`);
     return this.toView(saved);
   }
 
@@ -681,6 +704,7 @@ export class ApplicationsService {
     await this.applications.update(applicationId, {
       state: 'approved' as ApplicationState,
       approvedAt: new Date(),
+      approvedRevisionNo: latest.revisionNo,
       stateError: null,
     });
 

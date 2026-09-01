@@ -178,9 +178,10 @@ function makeHarness(opts: {
 }
 
 describe('DEFECT 1 — export failure at approve must be recoverable', () => {
-  it('reproduces the dead end: after an export failure every door is shut', async () => {
-    // This is the bug as the user hits it. Kept as a test because the escape hatch below is
-    // only meaningful if this state is genuinely unreachable through the normal entry points.
+  it('keeps approval absolute after an export failure while allowing a new review edit', async () => {
+    // The failed export remains recoverable through retryExport below. A deliberate new edit is
+    // separately allowed to reopen review, so a person can revise an approved CV rather than
+    // being trapped behind the old immutable-approved workflow.
     const { service, application } = makeHarness({
       pdfImpl: jest.fn(async () => {
         throw new Error('minio unreachable');
@@ -193,14 +194,10 @@ describe('DEFECT 1 — export failure at approve must be recoverable', () => {
     expect(application.state).toBe('approved');
     expect(application.stateError).toMatch(/export failed: minio unreachable/);
 
-    // ...and `approve`, `revise`, and `confirmClaim` all reject a non-in_review application,
-    // so before the fix there was no way back to the files.
-    await expect(service.revise('u1', 'app-1', 'shorten it', 'text')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-    await expect(
-      service.confirmClaim('u1', 'app-1', 1, 'ran postgres in production', 'confirm'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    // Re-approval is still not an idempotent setter: only an edit may reopen the state machine.
+    await expect(service.approve('u1', 'app-1')).rejects.toBeInstanceOf(ConflictException);
+    await service.edit('u1', 'app-1', '# Jane Doe\n\n## Experience\n\n### Acme\n\n- corrected manually');
+    expect(application.state).toBe('in_review');
   });
 
   it('retryExport completes the half-finished transition and clears stateError', async () => {
