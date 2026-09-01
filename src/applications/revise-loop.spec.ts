@@ -5,7 +5,6 @@ import { ApplicationsService } from './applications.service';
 function makeService(overrides: {
   state?: string;
   revisionCount?: number;
-  approvedRevisionNo?: number | null;
   reviseImpl?: jest.Mock;
   /** Turns this user has already spent in the current rate-limit window. */
   recentTurns?: number;
@@ -17,7 +16,6 @@ function makeService(overrides: {
     masterVersionId: 'mv-1',
     state: overrides.state ?? 'in_review',
     revisionCount: overrides.revisionCount ?? 0,
-    approvedRevisionNo: overrides.approvedRevisionNo ?? null,
     renderLanguage: 'en',
   };
   const applications = {
@@ -105,15 +103,17 @@ describe('ApplicationsService.revise', () => {
     await expect(service.revise('u1', 'app-1', 'x', 'text')).rejects.toThrow(/cap/i);
   });
 
-  it('allows a revision from approved, returns it to in_review, and diffs from its approval checkpoint', async () => {
-    const { service, applications, revise } = makeService({ state: 'approved', approvedRevisionNo: 1 });
+  it('allows a revision from approved, returns it to in_review, and diffs against its predecessor', async () => {
+    const { service, applications, revise } = makeService({ state: 'approved' });
     const result = await service.revise('u1', 'app-1', 'x', 'text');
     expect(revise.revise).toHaveBeenCalled();
     expect(applications.update).toHaveBeenLastCalledWith(
       'app-1', expect.objectContaining({ state: 'in_review' }),
     );
+    // Diff is against the immediately preceding revision (revisionNo - 1), not an approval
+    // checkpoint: this reverts to the original per-revision diff contract.
     const diff = await service.diff('u1', 'app-1', result.render.revisionNo);
-    expect(diff).toMatchObject({ baselineRevisionNo: 1, noBaseline: false });
+    expect(diff.baselineRevisionNo).toBe(result.render.revisionNo - 1);
     expect(diff.hunks.length).toBeGreaterThan(0);
   });
 

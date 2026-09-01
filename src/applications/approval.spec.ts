@@ -86,7 +86,7 @@ describe('approval gate', () => {
     await service.approve('u1', 'app-1');
     expect(applications.update).toHaveBeenCalledWith(
       'app-1',
-      expect.objectContaining({ state: 'approved', approvedRevisionNo: 1 }),
+      expect.objectContaining({ state: 'approved' }),
     );
   });
 

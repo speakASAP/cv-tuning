@@ -9,8 +9,8 @@ const source = {
   aiTellScore: 1, createdBy: 'ai', modelUsed: 'model', validatorModelUsed: 'validator', requestedTier: 'smart', degraded: false, promptVersion: 'tailor/entail', idempotencyKey: 'app-1:1',
 };
 
-function makeService(state = 'approved', approvedRevisionNo: number | null = 1) {
-  const application = { id: 'app-1', userId: 'u1', state, approvedRevisionNo, revisionCount: 0 };
+function makeService(state = 'approved') {
+  const application = { id: 'app-1', userId: 'u1', state, masterVersionId: 'mv-1', revisionCount: 0 };
   const rows = [source];
   const applications = {
     findOne: jest.fn().mockResolvedValue(application),
@@ -22,8 +22,14 @@ function makeService(state = 'approved', approvedRevisionNo: number | null = 1) 
     findOne: jest.fn().mockImplementation(async ({ where }: { where: { revisionNo: number } }) => rows.find((row) => row.revisionNo === where.revisionNo) ?? null),
     save: jest.fn().mockImplementation(async (draft) => { const row = { ...draft, id: 'r' + (rows.length + 1) }; rows.push(row); return row; }),
   };
+  const master = {
+    getVersion: jest.fn().mockResolvedValue({
+      master: { id: 'mv-1', markdown: '# Jane Doe\n\n## Experience\n\n### Acme\n\n- Built APIs' },
+      facts: [{ id: 'f1', payload: {}, kind: 'role' }],
+    }),
+  };
   const service = new ApplicationsService(
-    applications as never, renders as never, {} as never, {} as never, {} as never, entail as never,
+    applications as never, renders as never, {} as never, master as never, {} as never, entail as never,
     {} as never, {} as never, { find: jest.fn().mockResolvedValue([]), save: jest.fn() } as never,
     { render: jest.fn().mockResolvedValue({ content: Buffer.from('p'), sha256: 'p', mimeType: 'application/pdf' }) } as never,
     { render: jest.fn().mockResolvedValue({ content: Buffer.from('d'), sha256: 'd', mimeType: 'application/docx' }) } as never,
@@ -49,26 +55,26 @@ describe('ApplicationsService.edit', () => {
     await expect(service.edit('u1', 'app-1', '# Jane')).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('diffs the new render against the last approved revision, not revision zero or master', async () => {
-    const { service } = makeService('approved', 1);
+  it('diffs the new render against its predecessor revision, not the master CV', async () => {
+    const { service } = makeService();
     await service.edit('u1', 'app-1', '# Jane Doe\n\n## Experience\n\n### Acme\n\n- Updated API work');
     const diff = await service.diff('u1', 'app-1', 2);
-    expect(diff).toMatchObject({ revisionNo: 2, baselineRevisionNo: 1, noBaseline: false });
+    expect(diff).toMatchObject({ revisionNo: 2, baselineRevisionNo: 1 });
     expect(diff.hunks.length).toBeGreaterThan(0);
   });
 
-  it('re-approving an edited application records the new approved revision', async () => {
+  it('allows re-approving an edited application', async () => {
     const { service, applications } = makeService();
     await service.edit('u1', 'app-1', '# Jane Doe\n\n## Experience\n\n### Acme\n\n- Updated');
     await service.approve('u1', 'app-1');
     expect(applications.update).toHaveBeenCalledWith(
-      'app-1', expect.objectContaining({ state: 'approved', approvedRevisionNo: 2 }),
+      'app-1', expect.objectContaining({ state: 'approved' }),
     );
   });
 
-  it('reports no baseline until an application has a first approval', async () => {
-    const { service } = makeService('in_review', null);
+  it('diffs revision 1 against the pinned master CV', async () => {
+    const { service } = makeService('in_review');
     const diff = await service.diff('u1', 'app-1', 1);
-    expect(diff).toEqual({ revisionNo: 1, baselineRevisionNo: null, noBaseline: true, hunks: [] });
+    expect(diff.baselineRevisionNo).toBeNull();
   });
 });

@@ -81,10 +81,8 @@ export type RenderListItem = CvRenderEntity & { needsConfirmation: TailoredBulle
 
 export interface DiffView {
   revisionNo: number;
-  /** The last approved revision this was diffed against; null means none has been approved. */
+  /** The revision this was diffed against; null means the master CV was the baseline. */
   baselineRevisionNo: number | null;
-  /** A pre-approval render has no review checkpoint to compare against. */
-  noBaseline: boolean;
   hunks: DiffHunk[];
 }
 
@@ -300,36 +298,44 @@ export class ApplicationsService {
     return renders.map((render) => ({ ...render, needsConfirmation: this.toView(render).needsConfirmation }));
   }
 
-  /** Diffs a render against the CV checkpoint the user most recently approved. */
+  /** Diffs a revision against its predecessor, or against the master CV for revision 1. */
   async diff(userId: string, applicationId: string, revisionNo: number): Promise<DiffView> {
     const application = await this.findOwned(userId, applicationId);
+
     const render = await this.renders.findOne({ where: { applicationId, revisionNo } });
     if (!render) {
       throw new NotFoundException(`revision ${revisionNo} not found for application ${applicationId}`);
     }
 
-    if (application.approvedRevisionNo == null) {
-      // Before the first approval there is no user-approved checkpoint. Comparing arbitrary
-      // generated revisions would look authoritative while answering a different question.
-      return { revisionNo, baselineRevisionNo: null, noBaseline: true, hunks: [] };
-    }
-    if (application.approvedRevisionNo >= revisionNo) {
-      return { revisionNo, baselineRevisionNo: application.approvedRevisionNo, noBaseline: true, hunks: [] };
+    if (revisionNo > 1) {
+      const previous = await this.renders.findOne({
+        where: { applicationId, revisionNo: revisionNo - 1 },
+      });
+      if (!previous) {
+        throw new Error(
+          `revision ${revisionNo} of application ${applicationId} has no revision ${revisionNo - 1} to diff against`,
+        );
+      }
+      return {
+        revisionNo,
+        baselineRevisionNo: previous.revisionNo,
+        hunks: diffLines(previous.markdown, render.markdown),
+      };
     }
 
-    const approved = await this.renders.findOne({
-      where: { applicationId, revisionNo: application.approvedRevisionNo },
-    });
-    if (!approved) {
-      throw new Error(`application ${applicationId} records approved revision ${application.approvedRevisionNo}, which no longer exists`);
+    const pinned = await this.master.getVersion(userId, application.masterVersionId);
+    if (!pinned) {
+      throw new Error(
+        `application ${applicationId} pins master version ${application.masterVersionId}, which no longer exists`,
+      );
     }
+
+    // Spec §7: revision 1 is diffed against the master, so the first generation is
+    // reviewable as a diff rather than appearing from nowhere.
     return {
       revisionNo,
-      baselineRevisionNo: approved.revisionNo,
-      noBaseline: false,
-      // The proven review boundary is the approved render, not revisionNo - 1: decisions and
-      // AI iterations between approvals are audit history, not the change a person is reviewing.
-      hunks: diffLines(approved.markdown, render.markdown),
+      baselineRevisionNo: null,
+      hunks: diffLines(pinned.master.markdown, render.markdown),
     };
   }
 
@@ -704,7 +710,6 @@ export class ApplicationsService {
     await this.applications.update(applicationId, {
       state: 'approved' as ApplicationState,
       approvedAt: new Date(),
-      approvedRevisionNo: latest.revisionNo,
       stateError: null,
     });
 
