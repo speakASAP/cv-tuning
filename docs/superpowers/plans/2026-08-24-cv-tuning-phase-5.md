@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # CV Tuning Phase 5 Implementation Plan — Outcome Tracking, Dashboard, Nudges
@@ -115,7 +115,7 @@ that can be tested exhaustively without a database.
     — throws when the state is not `marked_sent`, or the outcome is not one of `OUTCOMES`.
   - `MARK_SENT_FROM: readonly ApplicationState[]` — exported so tests and callers agree on one list.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/applications/outcome.spec.ts`:
 
@@ -164,12 +164,12 @@ describe('assertCanRecordOutcome', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/applications/outcome.spec.ts`
 Expected: FAIL — `Cannot find module './outcome'`.
 
-- [ ] **Step 3: Write the minimal implementation**
+- [x] **Step 3: Write the minimal implementation**
 
 Create `src/applications/outcome.ts`:
 
@@ -213,17 +213,17 @@ export function assertCanRecordOutcome(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx jest src/applications/outcome.spec.ts`
 Expected: PASS, 6 cases.
 
-- [ ] **Step 5: Confirm the test fails when the behaviour is broken**
+- [x] **Step 5: Confirm the test fails when the behaviour is broken**
 
 Temporarily change `MARK_SENT_FROM` to `['downloaded', 'approved']`, re-run, and confirm the
 "rejects approved" case fails. Revert.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/applications/outcome.ts src/applications/outcome.spec.ts
@@ -246,7 +246,7 @@ nullable timestamps carry that, and `nudgedAt` is what makes the nudge idempoten
 - Produces: `CvApplicationEntity.sentAt: Date | null`, `.outcomeAt: Date | null`,
   `.nudgedAt: Date | null`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `src/applications/entities/phase4-entities.spec.ts`:
 
@@ -280,12 +280,12 @@ describe('cv_application outcome-tracking columns', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/applications/entities/phase4-entities.spec.ts`
 Expected: FAIL — `expect(columns).toContain('sentAt')`.
 
-- [ ] **Step 3: Add the columns to the entity**
+- [x] **Step 3: Add the columns to the entity**
 
 In `src/applications/entities/cv-application.entity.ts`, add after the `outcome` column:
 
@@ -310,7 +310,7 @@ In `src/applications/entities/cv-application.entity.ts`, add after the `outcome`
   nudgedAt!: Date | null;
 ```
 
-- [ ] **Step 4: Write the migration**
+- [x] **Step 4: Write the migration**
 
 Create `src/database/migrations/1756800000000-AddOutcomeTracking.ts`:
 
@@ -344,7 +344,7 @@ export class AddOutcomeTracking1756800000000 implements MigrationInterface {
 }
 ```
 
-- [ ] **Step 5: Register the migration**
+- [x] **Step 5: Register the migration**
 
 Migrations are discovered by glob, not by list — confirm with:
 
@@ -355,12 +355,12 @@ rtk rg -n "migrations" src/database/database.module.ts
 If the module lists migrations explicitly, add `AddOutcomeTracking1756800000000` to that array.
 If it globs (`migrations: [__dirname + '/migrations/*.js']` or similar), no change is needed.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `npx jest src/applications/entities/phase4-entities.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/applications/entities/cv-application.entity.ts src/database/migrations/1756800000000-AddOutcomeTracking.ts src/applications/entities/phase4-entities.spec.ts
@@ -383,7 +383,7 @@ git commit -m "feat(applications): sentAt, outcomeAt and nudgedAt columns"
   - `ApplicationsService.markSent(userId: string, applicationId: string, sentAt?: Date): Promise<CvApplicationEntity>`
   - `ApplicationsService.recordOutcome(userId: string, applicationId: string, outcome: string): Promise<CvApplicationEntity>`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/applications/outcome-tracking.spec.ts`. It builds the service with fake
 repositories, following the pattern already used in `approval-recovery.spec.ts` — open that file
@@ -540,12 +540,12 @@ describe('recordOutcome', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/applications/outcome-tracking.spec.ts`
 Expected: FAIL — `service.markSent is not a function`.
 
-- [ ] **Step 3: Implement both methods**
+- [x] **Step 3: Implement both methods**
 
 Add to `src/applications/applications.service.ts`, after `download`:
 
@@ -677,7 +677,7 @@ built in Task 5 — until then this will not compile, so implement Task 5 before
 To keep this task independently green, create the file now as a stub with the two method
 signatures and a `throw new Error('not implemented')` body, and replace it in Task 5.
 
-- [ ] **Step 4: Write the DTOs**
+- [x] **Step 4: Write the DTOs**
 
 Create `src/applications/dto/mark-sent.dto.ts`:
 
@@ -709,17 +709,17 @@ export class RecordOutcomeDto {
 }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `npx jest src/applications/outcome-tracking.spec.ts`
 Expected: PASS, 10 cases.
 
-- [ ] **Step 6: Confirm the guard is load-bearing**
+- [x] **Step 6: Confirm the guard is load-bearing**
 
 Temporarily change `assertCanRecordOutcome`'s state check to `state !== 'nonexistent'`, re-run,
 and confirm "refuses an outcome before the user asserted the send" fails. Revert.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/applications/applications.service.ts src/applications/dto/mark-sent.dto.ts src/applications/dto/record-outcome.dto.ts src/applications/outcome-tracking.spec.ts
@@ -738,7 +738,7 @@ git commit -m "feat(applications): markSent and recordOutcome transitions"
 - Consumes: `markSent`, `recordOutcome` (Task 3); `MarkSentDto`, `RecordOutcomeDto`.
 - Produces: `POST /api/applications/:id/mark-sent`, `POST /api/applications/:id/outcome`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `src/applications/applications.controller.spec.ts` (mirror the existing describe
 block's service-double construction):
@@ -782,12 +782,12 @@ describe('outcome endpoints', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/applications/applications.controller.spec.ts`
 Expected: FAIL — `controller.markSent is not a function`.
 
-- [ ] **Step 3: Add the endpoints**
+- [x] **Step 3: Add the endpoints**
 
 In `src/applications/applications.controller.ts`, after `retryExport`:
 
@@ -825,12 +825,12 @@ import { MarkSentDto } from './dto/mark-sent.dto';
 import { RecordOutcomeDto } from './dto/record-outcome.dto';
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx jest src/applications/applications.controller.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/applications/applications.controller.ts src/applications/applications.controller.spec.ts
@@ -860,7 +860,7 @@ The contract is BPCP's real one, verified against
 `POST /api/instances/:id/signals` takes `{name, payload}`. Neither endpoint carries an auth
 guard today.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/bpcp/bpcp-client.service.spec.ts`:
 
@@ -938,12 +938,12 @@ describe('deliverSignal', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/bpcp/bpcp-client.service.spec.ts`
 Expected: FAIL — module not found (or "not implemented" if Task 3's stub is in place).
 
-- [ ] **Step 3: Implement the client**
+- [x] **Step 3: Implement the client**
 
 Create `src/bpcp/bpcp-client.service.ts`:
 
@@ -1054,16 +1054,16 @@ import { BpcpClientService, BPCP_SERVICE_URL } from './bpcp-client.service';
 export class BpcpModule {}
 ```
 
-- [ ] **Step 4: Wire it into the applications module**
+- [x] **Step 4: Wire it into the applications module**
 
 In `src/applications/applications.module.ts`, add `BpcpModule` to `imports`.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `npx jest src/bpcp/`
 Expected: PASS, 6 cases.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/bpcp/ src/applications/applications.module.ts
@@ -1082,7 +1082,7 @@ git commit -m "feat(bpcp): workflow instance client for outcome watches"
 - Consumes: `BpcpClientService.startOutcomeWatch` (Task 5).
 - Produces: `download` sets `bpcpInstanceId` when it starts a watch. No signature change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/applications/outcome-watch.spec.ts`. Reuse the repository double from
 `outcome-tracking.spec.ts` — copy it rather than importing across spec files, so each suite
@@ -1181,12 +1181,12 @@ describe('download starts the outcome watch', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx jest src/applications/outcome-watch.spec.ts`
 Expected: FAIL — `startOutcomeWatch` not called.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/applications/applications.service.ts`, replace the final two lines of `download`:
 
@@ -1230,12 +1230,12 @@ with:
     const application = await this.findOwned(userId, applicationId);
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx jest src/applications/outcome-watch.spec.ts`
 Expected: PASS, 3 cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/applications/applications.service.ts src/applications/outcome-watch.spec.ts
@@ -1266,7 +1266,7 @@ The notifications contract is real, verified against
 no credential), so the controller must NOT be under `CvAuthGuard`. It is protected instead by a
 shared secret header, and the endpoint is not in any ingress (Phase 5 has no ingress at all).
 
-- [ ] **Step 1: Write the failing test for the client**
+- [x] **Step 1: Write the failing test for the client**
 
 Create `src/notifications/notification-client.service.spec.ts`:
 
@@ -1328,12 +1328,12 @@ Note the deliberate asymmetry with `BpcpClientService`: an unset BPCP url means 
 has no workflow plane", which is a valid configuration; an unset notifications url reached at the
 moment a nudge is due means the nudge is being dropped, which is not.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest src/notifications/notification-client.service.spec.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the client**
+- [x] **Step 3: Implement the client**
 
 Create `src/notifications/notification-client.service.ts`:
 
@@ -1407,7 +1407,7 @@ export class NotificationClientService {
 }
 ```
 
-- [ ] **Step 4: Write the failing test for the callback controller**
+- [x] **Step 4: Write the failing test for the callback controller**
 
 Create `src/notifications/nudge.controller.spec.ts`:
 
@@ -1513,12 +1513,12 @@ describe('POST /api/nudges/outcome', () => {
 });
 ```
 
-- [ ] **Step 5: Run to verify it fails**
+- [x] **Step 5: Run to verify it fails**
 
 Run: `npx jest src/notifications/nudge.controller.spec.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 6: Implement the controller**
+- [x] **Step 6: Implement the controller**
 
 Create `src/notifications/nudge.controller.ts`:
 
@@ -1626,7 +1626,7 @@ rtk rg -n "class Cv.*Entity|company" src/jobs/entities/*.ts
 
 Adjust the import and the `company` read if the names differ.
 
-- [ ] **Step 7: Wire the module**
+- [x] **Step 7: Wire the module**
 
 Create `src/notifications/notifications.module.ts`:
 
@@ -1657,17 +1657,17 @@ export class NotificationsModule {}
 
 Add `NotificationsModule` and `BpcpModule` to `src/app.module.ts` imports.
 
-- [ ] **Step 8: Run the tests**
+- [x] **Step 8: Run the tests**
 
 Run: `npx jest src/notifications/`
 Expected: PASS, 11 cases.
 
-- [ ] **Step 9: Confirm the secret check is load-bearing**
+- [x] **Step 9: Confirm the secret check is load-bearing**
 
 Temporarily change the guard to `if (false)`, re-run, confirm "rejects a caller without the
 shared secret" fails. Revert.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/notifications/ src/app.module.ts
@@ -1691,7 +1691,7 @@ The shape is BPCP's real `WorkflowDefinition`, verified against
 `../business-process-control-plane/src/workflows/workflow.types.ts`. The wait action's parameters
 are read by `readWaitParameters`: `signalName`, `timeoutMs`, `onTimeout`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/bpcp/workflow-definition.spec.ts`:
 
@@ -1729,12 +1729,12 @@ describe('cv-application-outcome workflow', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest src/bpcp/workflow-definition.spec.ts`
 Expected: FAIL — ENOENT on the workflow file.
 
-- [ ] **Step 3: Write the definition**
+- [x] **Step 3: Write the definition**
 
 Create `docs/workflows/cv-application-outcome.workflow.json`:
 
@@ -1794,12 +1794,12 @@ BPCP-side env reference, never a literal in this JSON. If BPCP's dispatcher cann
 this phase, take **(b)** and record it as a trap in `STATE.json`, since a secret in a URL is
 weaker and must not survive into Phase 7.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `npx jest src/bpcp/workflow-definition.spec.ts`
 Expected: PASS, 3 cases.
 
-- [ ] **Step 5: Register the workflow with BPCP**
+- [x] **Step 5: Register the workflow with BPCP**
 
 BPCP is a separate service and is **not** deployed by this plan. Register the definition against
 the running instance and confirm it round-trips:
@@ -1818,7 +1818,7 @@ correct command in `STATE.json`. Confirm with:
 rtk curl -sS http://localhost:3375/api/workflows | head -20
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/workflows/cv-application-outcome.workflow.json src/bpcp/workflow-definition.spec.ts
@@ -1843,7 +1843,7 @@ git commit -m "feat(bpcp): cv-application-outcome workflow definition"
 undefined, and reporting `0%` would tell the user their CV is failing when they simply have not
 sent one yet.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/dashboard/dashboard.service.spec.ts`:
 
@@ -1964,12 +1964,12 @@ describe('summary', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx jest src/dashboard/dashboard.service.spec.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the service**
+- [x] **Step 3: Implement the service**
 
 Create `src/dashboard/dashboard.service.ts`:
 
@@ -2107,7 +2107,7 @@ export class DashboardService {
 }
 ```
 
-- [ ] **Step 4: Add the controller and module**
+- [x] **Step 4: Add the controller and module**
 
 Create `src/dashboard/dashboard.controller.ts`:
 
@@ -2148,17 +2148,17 @@ export class DashboardModule {}
 
 Add `DashboardModule` to `src/app.module.ts` imports.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `npx jest src/dashboard/`
 Expected: PASS, 7 cases.
 
-- [ ] **Step 6: Confirm the null-rate rule is load-bearing**
+- [x] **Step 6: Confirm the null-rate rule is load-bearing**
 
 Temporarily change `interviewRate` to `interviews / funnel.sent` unconditionally, re-run, and
 confirm "returns a null interview rate when nothing has been sent" fails with `NaN`. Revert.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/dashboard/ src/app.module.ts
@@ -2172,13 +2172,13 @@ git commit -m "feat(dashboard): funnel and outcome aggregation endpoint"
 **Files:**
 - Modify: `k8s/configmap.yaml`, `STATE.json`, `CLAUDE.md`, `README.md`
 
-- [ ] **Step 1: Run the full gate**
+- [x] **Step 1: Run the full gate**
 
 Run: `npm test`
 Expected: PASS. Suites 36 → ~43, cases 458 → ~505, **skipped still exactly 11**. A higher skip
 count is a regression — investigate before continuing.
 
-- [ ] **Step 2: Add the config keys**
+- [x] **Step 2: Add the config keys**
 
 In `k8s/configmap.yaml`, add:
 
@@ -2204,7 +2204,7 @@ carry it:
 
 Then add the key to `k8s/external-secret.yaml` alongside the existing entries.
 
-- [ ] **Step 3: Update STATE.json**
+- [x] **Step 3: Update STATE.json**
 
 Set `phases.5.status` to `"done"` and `phases.6.status` to `"next"`. Update `tests` to the counts
 `npm test` actually printed in step 1 — never to the estimate above. Add to `traps`:
@@ -2218,25 +2218,25 @@ Set `phases.5.status` to `"done"` and `phases.6.status` to `"next"`. Update `tes
 
 Update the superseded `openItems` entry about Phase 5 if one exists.
 
-- [ ] **Step 4: Update CLAUDE.md**
+- [x] **Step 4: Update CLAUDE.md**
 
 Add a `**dashboard/**`, `**bpcp/**`, and `**notifications/**` paragraph to the Architecture
 section, in the same voice as the existing module paragraphs — each stating the constraint that
 explains why the code looks the way it does, not what the code does.
 
-- [ ] **Step 5: Run the gate again after the doc edits**
+- [x] **Step 5: Run the gate again after the doc edits**
 
 Run: `npm test`
 Expected: PASS, same counts as step 1.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add k8s/ STATE.json CLAUDE.md README.md
 git commit -m "feat(cv-tuning): phase 5 config, state and docs"
 ```
 
-- [ ] **Step 7: Verify the deploy**
+- [x] **Step 7: Verify the deploy**
 
 Committing to `main` queues the deploy automatically. Do not run `deploy.sh`.
 

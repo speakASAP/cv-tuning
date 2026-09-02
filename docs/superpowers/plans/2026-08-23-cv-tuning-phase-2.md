@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # cv-tuning Phase 2 — JD Ingest and Fit Score Implementation Plan
@@ -58,7 +58,7 @@ Boundaries: the fetcher knows nothing about parsing, the parser nothing about sc
 - Consumes: nothing
 - Produces: `CvJobEntity`; `FetchStatus = 'ok' | 'blocked' | 'thin' | 'failed'`; `JobSource = 'fetch' | 'paste'`; `Requirement = { text: string; kind: 'must' | 'nice'; category: string }`
 
-- [ ] **Step 1: Write the types**
+- [x] **Step 1: Write the types**
 
 ```ts
 export const FETCH_STATUSES = ['ok', 'blocked', 'thin', 'failed'] as const;
@@ -82,17 +82,17 @@ export interface ParsedRequirements {
 }
 ```
 
-- [ ] **Step 2: Write the entity**
+- [x] **Step 2: Write the entity**
 
 `cv_job` per spec §4: `id`, `userId`, `url` (nullable — a pasted job has none), `source`, `rawText`, `parsed jsonb`, `company`, `title`, `language`, `fetchStatus`, `fetchedAt`, `expiresAt`.
 
 `expiresAt` exists from the start: `rawText` is third-party copyrighted content and Phase 7 must be able to expire it while keeping the derived `parsed` requirements.
 
-- [ ] **Step 3: Write the migration and register the entity**
+- [x] **Step 3: Write the migration and register the entity**
 
 Raw SQL, matching `1756200000000-CreateMasterTables.ts`. Index `userId` and `fetchStatus`. Add `CvJobEntity` to `CV_ENTITIES`.
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 ```bash
 npm run build
@@ -100,7 +100,7 @@ npm run build
 
 Expected: succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/jobs src/database
@@ -118,7 +118,7 @@ git commit -m "feat: job posting schema with explicit fetch status"
 - Consumes: nothing
 - Produces: `JobFetcherService.fetch(url: string): Promise<FetchResult>` where `FetchResult = { status: FetchStatus; text: string; reason?: string }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Cover, at minimum:
 
@@ -135,7 +135,7 @@ it('rejects a non-http URL scheme', ...);                 // no file:// or data:
 it('does not follow a redirect to a private address', ...); // SSRF guard
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/jobs/job-fetcher
@@ -143,13 +143,13 @@ it('does not follow a redirect to a private address', ...); // SSRF guard
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Reduce HTML by stripping `<script>`, `<style>`, `<nav>`, `<footer>`, then collapsing tags to text. Under ~400 characters is `thin` — a JS-rendered shell, not a real posting. 401/403/429 is `blocked`; 5xx and transport errors are `failed`. **`ok` with empty text is impossible by construction.**
 
 **SSRF guard:** this endpoint takes a user-supplied URL and fetches it from inside the cluster. Reject non-`http(s)` schemes and any host resolving to a private or loopback range, before and after redirects.
 
-- [ ] **Step 4: Run to verify they pass, then commit**
+- [x] **Step 4: Run to verify they pass, then commit**
 
 ```bash
 ./node_modules/.bin/jest src/jobs/job-fetcher
@@ -168,7 +168,7 @@ git commit -m "feat: job fetcher with explicit failure classification and SSRF g
 - Consumes: `AiClientService`
 - Produces: `JobParserService.parse(text: string): Promise<ParsedRequirements>`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Mirror `fact-extractor.service.spec.ts`, which is the proven shape:
 
@@ -184,11 +184,11 @@ it('raises when parsing ran on a degraded model', ...);
 it('raises rather than parsing empty text', ...);
 ```
 
-- [ ] **Step 2–4: Fail, implement, pass**
+- [x] **Step 2–4: Fail, implement, pass**
 
 Prompt instructs: extract only stated requirements, never infer; classify `must` vs `nice` from the posting's own wording; detect language. Same degraded-model refusal as the fact extractor — a downgraded parse yields requirements every later stage trusts.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat: parse job postings into structured requirements"
@@ -209,7 +209,7 @@ The product differentiator in this phase: the score must explain itself.
   `FitReport = { score: number; matches: RequirementMatch[]; gaps: RequirementMatch[] }` and
   `RequirementMatch = { requirement: Requirement; factIds: string[]; verdict: 'met' | 'partial' | 'missing'; evidence: string | null }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('marks a requirement met when a fact supports it and cites the factId', ...);
@@ -223,15 +223,15 @@ it('returns every requirement across matches and gaps, losing none', ...);
 it('handles a CV with no facts without crashing', ...);
 ```
 
-- [ ] **Step 2–4: Fail, implement, pass**
+- [x] **Step 2–4: Fail, implement, pass**
 
 The model returns a verdict and cited `factIds` per requirement. **Post-validate every cited id against the supplied fact set and drop unknown ones** — the same anti-fabrication discipline Phase 3 will formalise. Score is a weighted ratio: `must` counts 3, `nice` counts 1; `partial` earns half credit.
 
-- [ ] **Step 5: Verify the fabrication guard can fail**
+- [x] **Step 5: Verify the fabrication guard can fail**
 
 Temporarily accept unvalidated ids; the "never cites a factId that is not in the supplied facts" test must go red. Restore.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -m "feat: fit scoring with per-requirement evidence and citation validation"
@@ -252,7 +252,7 @@ git commit -m "feat: fit scoring with per-requirement evidence and citation vali
 - Consumes: everything above, plus `MasterCvService`
 - Produces: `POST /api/jobs` (url), `POST /api/jobs/:id/text` (paste fallback), `GET /api/jobs`, `GET /api/jobs/:id`, `POST /api/jobs/:id/score`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('persists a job with fetchStatus blocked and no parsed requirements', ...);
@@ -265,11 +265,11 @@ it('404s a job belonging to another user', ...);                     // tenancy
 it('never reads userId from the request body', ...);
 ```
 
-- [ ] **Step 2–4: Fail, implement, pass**
+- [x] **Step 2–4: Fail, implement, pass**
 
 Tenancy is enforced in every query by `userId` from the token. A blocked fetch is a **successful request** returning a job whose status tells the UI to ask for a paste — not an error.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat: job submission, paste fallback, and scoring endpoints"
@@ -279,7 +279,7 @@ git commit -m "feat: job submission, paste fallback, and scoring endpoints"
 
 ### Task 6: Deploy
 
-- [ ] **Step 1: Verify the migration on a scratch database**
+- [x] **Step 1: Verify the migration on a scratch database**
 
 ```bash
 docker run -d --name cv-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=cv_test -p 5435:5432 postgres:16-alpine
@@ -288,11 +288,11 @@ CV_DATABASE_URL=postgresql://postgres:postgres@localhost:5435/cv_test npm run st
 
 Expected: `cv_job` created alongside the existing tables. Check the deploy lock first — `shared/scripts/with-deploy-lock.sh --status` — before creating any container.
 
-- [ ] **Step 2: Merge, push, deploy**
+- [x] **Step 2: Merge, push, deploy**
 
 `git merge` does **not** trigger auto-deploy (there is no `post-merge` hook), so run `./scripts/deploy.sh` explicitly after pushing.
 
-- [ ] **Step 3: Verify by pod age, not the deploy banner**
+- [x] **Step 3: Verify by pod age, not the deploy banner**
 
 ```bash
 kubectl get pods -n statex-apps -l app=cv-tuning \

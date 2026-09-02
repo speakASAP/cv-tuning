@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # cv-tuning Phase 1 — Foundation Implementation Plan
@@ -61,7 +61,7 @@ Boundaries: `fact-extractor` turns text into facts and knows nothing about stora
 - Consumes: nothing
 - Produces: a service listening on 3379 with `GET /health` returning `{ status: 'ok', service: 'cv-tuning' }`
 
-- [ ] **Step 1: Scaffold from the ecosystem standard**
+- [x] **Step 1: Scaffold from the ecosystem standard**
 
 Use the registration skill rather than hand-rolling — it assigns config, manifests, Vault paths, and agent docs consistently.
 
@@ -72,7 +72,7 @@ cd /home/ssf/Documents/Github/cv-tuning
 
 If the skill cannot run, copy the shape of `catalog-microservice` (`package.json`, `tsconfig.json`, `nest-cli.json`, `Dockerfile`, `k8s/`, `scripts/deploy.sh`), replacing name and port throughout.
 
-- [ ] **Step 2: Write the failing health test**
+- [x] **Step 2: Write the failing health test**
 
 Create `src/health/health.controller.spec.ts`:
 
@@ -86,7 +86,7 @@ describe('HealthController', () => {
 });
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 ```bash
 ./node_modules/.bin/jest src/health/health.controller.spec.ts
@@ -94,7 +94,7 @@ describe('HealthController', () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Create `src/health/health.controller.ts`:
 
@@ -112,7 +112,7 @@ export class HealthController {
 
 Create `src/health/health.module.ts` exporting it, and `src/main.ts` listening on `process.env.PORT ?? 3379` with `app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))`.
 
-- [ ] **Step 5: Run to verify it passes and the service boots**
+- [x] **Step 5: Run to verify it passes and the service boots**
 
 ```bash
 ./node_modules/.bin/jest src/health/health.controller.spec.ts
@@ -122,7 +122,7 @@ sleep 3 && curl -sS localhost:3379/health && kill %1
 
 Expected: test PASS; curl returns the JSON above.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -141,7 +141,7 @@ git commit -m "feat: scaffold cv-tuning on port 3379"
 - Consumes: `AUTH_SERVICE_URL`
 - Produces: `CvAuthGuard`; `request.user = { id: string; email: string }`
 
-- [ ] **Step 1: Read the existing pattern before writing anything**
+- [x] **Step 1: Read the existing pattern before writing anything**
 
 ```bash
 rtk cat ../catalog-microservice/src/auth/catalog-auth.guard.ts
@@ -150,7 +150,7 @@ rtk cat ../catalog-microservice/src/auth/catalog-auth.guard.spec.ts
 
 Follow it. Do not invent a different validation shape.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `src/auth/cv-auth.guard.spec.ts`:
 
@@ -200,7 +200,7 @@ describe('CvAuthGuard', () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/auth/cv-auth.guard.spec.ts
@@ -208,11 +208,11 @@ describe('CvAuthGuard', () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 4: Implement, following the catalog pattern**
+- [x] **Step 4: Implement, following the catalog pattern**
 
 Create `src/auth/cv-auth.guard.ts`. Key requirement beyond the copied pattern: a transport error must throw a `ServiceUnavailableException` mentioning `auth-microservice`, **not** an `UnauthorizedException` — an outage is not a bad credential, and conflating them hides the outage.
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
 ```bash
 ./node_modules/.bin/jest src/auth/cv-auth.guard.spec.ts
@@ -220,7 +220,7 @@ Create `src/auth/cv-auth.guard.ts`. Key requirement beyond the copied pattern: a
 
 Expected: PASS, all four.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/auth
@@ -240,13 +240,13 @@ git commit -m "feat: JWT auth guard against auth-microservice"
 - Consumes: nothing
 - Produces: `CvProfileEntity`, `CvMasterEntity`, `CvFactEntity`; `FactKind = 'role' | 'achievement' | 'skill' | 'education' | 'certification' | 'proof'`
 
-- [ ] **Step 1: Install dependencies**
+- [x] **Step 1: Install dependencies**
 
 ```bash
 npm install --save @nestjs/typeorm@^10.0.0 typeorm@^0.3.17 pg@^8.11.3
 ```
 
-- [ ] **Step 2: Write the entities**
+- [x] **Step 2: Write the entities**
 
 `cv-master.entity.ts` carries the drift detector. Columns per spec §4:
 
@@ -318,11 +318,11 @@ export class CvFactEntity {
 
 `cv-profile.entity.ts` includes the Phase 7 columns now so GDPR is a behaviour change, not a migration: `userId` (pk), `locale`, `consentVersion` (nullable), `consentAt` (nullable), `createdAt`.
 
-- [ ] **Step 3: Write the migration and database module**
+- [x] **Step 3: Write the migration and database module**
 
 Mirror the BPCP executor plan's Task 1: raw SQL migration, `synchronize: false`, `migrationsRun: true`, and a hard throw when `CV_DATABASE_URL` is unset — a missing DSN must never degrade to an in-memory store.
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 ```bash
 npm run build
@@ -330,7 +330,7 @@ npm run build
 
 Expected: succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json src/database src/master/entities .env.example src/app.module.ts
@@ -350,7 +350,7 @@ Pure functions, no I/O. This is the subtlest logic in the phase, so it is isolat
 - Consumes: nothing
 - Produces: `hashFactContent(text: string): string`, `matchFactIds(previous: StoredFact[], extracted: ExtractedFact[]): MatchedFact[]` where `MatchedFact = ExtractedFact & { id: string; isNew: boolean }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/master/fact-identity.spec.ts`:
 
@@ -404,7 +404,7 @@ describe('fact identity', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/master/fact-identity.spec.ts
@@ -412,11 +412,11 @@ describe('fact identity', () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/master/fact-identity.ts`. `hashFactContent` normalizes whitespace and lowercases before `sha256`. `matchFactIds` consumes each stored fact at most once — build a `Map<hash, id[]>` and shift an id off on match, so duplicate text does not collapse into one fact.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 ```bash
 ./node_modules/.bin/jest src/master/fact-identity.spec.ts
@@ -424,7 +424,7 @@ Create `src/master/fact-identity.ts`. `hashFactContent` normalizes whitespace an
 
 Expected: PASS, all six.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/master/fact-identity.ts src/master/fact-identity.spec.ts
@@ -442,7 +442,7 @@ git commit -m "feat: content-hash fact identity matching"
 - Consumes: `AI_SERVICE_URL`
 - Produces: `AiClientService.complete(input: { tier: 'cheap' | 'smart'; prompt: string; schema?: object; timeoutMs?: number }): Promise<AiCompletion>` where `AiCompletion = { text: string; modelUsed: string; degraded: boolean }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/ai/ai-client.service.spec.ts`:
 
@@ -509,7 +509,7 @@ describe('AiClientService', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/ai/ai-client.service.spec.ts
@@ -517,7 +517,7 @@ describe('AiClientService', () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/ai/ai-client.service.ts`. Requirements:
 
@@ -531,7 +531,7 @@ const EXPECTED_MODELS: Record<'cheap' | 'smart', string[]> = {
 
 `degraded` is `true` whenever `model_used` is not in the requested tier's list. Empty `text` throws — an empty completion is a failure, never a result. Default `timeoutMs` must be **larger** than the LiteLLM proxy's `request_timeout` (120s), or the fallback chain never runs; use 150000 and comment why.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 ```bash
 ./node_modules/.bin/jest src/ai/ai-client.service.spec.ts
@@ -539,7 +539,7 @@ const EXPECTED_MODELS: Record<'cheap' | 'smart', string[]> = {
 
 Expected: PASS, all five.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ai
@@ -557,7 +557,7 @@ git commit -m "feat: ai-microservice client with silent-downgrade detection"
 - Consumes: `AiClientService` (5)
 - Produces: `FactExtractorService.extract(markdown: string): Promise<ExtractedFact[]>` where `ExtractedFact = { kind: FactKind; text: string; payload: Record<string, unknown>; metric: string | null; position: number }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/master/fact-extractor.service.spec.ts`:
 
@@ -618,7 +618,7 @@ describe('FactExtractorService', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/master/fact-extractor.service.spec.ts
@@ -626,11 +626,11 @@ describe('FactExtractorService', () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/master/fact-extractor.service.ts`. The prompt instructs the model to return `{"facts":[{kind,text,payload,metric}]}` and to extract only what is present — never to infer or embellish. Validate every `kind` against the `FactKind` union and throw on an unknown one. Distinguish a parse failure from an empty result, as the tests require.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 ```bash
 ./node_modules/.bin/jest src/master/fact-extractor.service.spec.ts
@@ -638,7 +638,7 @@ Create `src/master/fact-extractor.service.ts`. The prompt instructs the model to
 
 Expected: PASS, all six.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/master/fact-extractor.service.ts src/master/fact-extractor.service.spec.ts
@@ -656,7 +656,7 @@ git commit -m "feat: extract fact graph from master CV markdown"
 - Consumes: entities (3), `matchFactIds` / `hashFactContent` (4), `FactExtractorService` (6)
 - Produces: `MasterCvService.save(userId, markdown, sourceType, sourceRef?): Promise<SaveResult>` where `SaveResult = { master: CvMasterEntity; factDiff: { added: MatchedFact[]; removed: StoredFact[]; kept: number } }`; `.getCurrent(userId): Promise<{ master; facts } | null>`; `.assertFactsFresh(master): void`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/master/master-cv.service.spec.ts`. Key behaviours — the conflict rule from spec §4.1:
 
@@ -701,7 +701,7 @@ describe('MasterCvService', () => {
 
 Fill in the four persistence tests against the test Postgres, following the pattern in the BPCP plan's Task 2 (`BPCP_TEST_DATABASE_URL` → `CV_TEST_DATABASE_URL`, `describe.skip` when unset).
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/master/master-cv.service.spec.ts
@@ -709,11 +709,11 @@ Fill in the four persistence tests against the test Postgres, following the patt
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/master/master-cv.service.ts`. `save` runs in one transaction: hash the markdown, extract facts, match IDs against the previous version's facts, insert the new version with `isCurrent = true`, clear `isCurrent` on the prior version, and return the fact diff for the confirmation UI. `assertFactsFresh` compares `hashFactContent(master.markdown)` against `master.factsExtractedFromMarkdownSha` and throws a named error on mismatch. Never write markdown from facts.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 ```bash
 export CV_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/cv_test
@@ -722,11 +722,11 @@ export CV_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/cv_tes
 
 Expected: PASS, all six.
 
-- [ ] **Step 5: Confirm the drift test can fail**
+- [x] **Step 5: Confirm the drift test can fail**
 
 Temporarily make `assertFactsFresh` a no-op and re-run. The drift test MUST fail. Restore it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/master/master-cv.service.ts src/master/master-cv.service.spec.ts
@@ -749,7 +749,7 @@ git commit -m "feat: master CV versioning with markdown-as-source-of-truth"
 
 Upload of PDF/DOCX and LinkedIn archive import are **Task 9**, kept separate because they need MinIO and a parser.
 
-- [ ] **Step 1: Write the failing controller tests**
+- [x] **Step 1: Write the failing controller tests**
 
 Create `src/master/master-cv.controller.spec.ts`:
 
@@ -792,7 +792,7 @@ describe('MasterCvController', () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing importer tests**
+- [x] **Step 2: Write the failing importer tests**
 
 Create `src/master/importers/gdocs.importer.spec.ts`:
 
@@ -820,7 +820,7 @@ describe('GdocsImporter', () => {
 });
 ```
 
-- [ ] **Step 3: Run both to verify they fail**
+- [x] **Step 3: Run both to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/master/master-cv.controller.spec.ts src/master/importers/gdocs.importer.spec.ts
@@ -828,11 +828,11 @@ describe('GdocsImporter', () => {
 
 Expected: FAIL — modules not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Create the DTOs (`markdown` required, non-empty; `url` required), `GdocsImporter` (static `exportUrl` regex on `/document/d/([^/]+)/`, instance `fetchMarkdown` mapping 401/403 to a "must be link-shared" error), the controller guarded by `CvAuthGuard`, and `master.module.ts`.
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
 ```bash
 ./node_modules/.bin/jest src/master/
@@ -841,7 +841,7 @@ npm run build
 
 Expected: PASS; build succeeds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/master
@@ -862,20 +862,20 @@ git commit -m "feat: master CV import via paste and Google Docs link"
 - Consumes: `AiClientService` (5), `MasterCvService` (7)
 - Produces: `POST /api/master/import/upload`; `MinioService.putObject(key, buffer, contentType): Promise<string>`
 
-- [ ] **Step 1: Read the existing MinIO pattern**
+- [x] **Step 1: Read the existing MinIO pattern**
 
 ```bash
 rtk cat ../catalog-microservice/src/media/media.service.ts
 rtk cat ../catalog-microservice/k8s/external-secret.yaml
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `document.importer.spec.ts` must cover: PDF text extraction returns markdown; a scanned/image-only PDF with no text layer **raises** rather than returning empty markdown; DOCX extraction works; an unsupported MIME type is rejected by name.
 
 `linkedin.importer.spec.ts` must cover: a `Positions.csv` from the archive maps to role facts; a missing expected CSV raises naming the file; an empty archive raises.
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 ```bash
 ./node_modules/.bin/jest src/master/importers/
@@ -883,11 +883,11 @@ rtk cat ../catalog-microservice/k8s/external-secret.yaml
 
 Expected: FAIL.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Store the original upload in MinIO (bucket `cv-uploads`, key `${userId}/${uuid}.${ext}`) and record the key as `sourceRef`. Extract text, then hand it to `FactExtractorService` via the normal save path. Never let an empty extraction stand in for a failure.
 
-- [ ] **Step 5: Run to verify they pass, then commit**
+- [x] **Step 5: Run to verify they pass, then commit**
 
 ```bash
 ./node_modules/.bin/jest src/master/importers/
@@ -902,7 +902,7 @@ git commit -m "feat: import master CV from PDF, DOCX, and LinkedIn archive"
 **Files:**
 - Modify: `k8s/configmap.yaml`, `k8s/external-secret.yaml`, `k8s/deployment.yaml`
 
-- [ ] **Step 1: Create the database and role**
+- [x] **Step 1: Create the database and role**
 
 ```bash
 kubectl port-forward -n statex-apps svc/db-server-postgres 5433:5432 &
@@ -911,7 +911,7 @@ psql "postgresql://postgres@localhost:5433/postgres" -c "CREATE ROLE cv_app LOGI
 psql "postgresql://postgres@localhost:5433/postgres" -c "GRANT ALL PRIVILEGES ON DATABASE cv TO cv_app;"
 ```
 
-- [ ] **Step 2: Store secrets in Vault and name every key in the manifest**
+- [x] **Step 2: Store secrets in Vault and name every key in the manifest**
 
 ```bash
 /vault-secret cv-tuning set CV_DATABASE_URL=postgresql://cv_app:<generated>@db-server-postgres:5432/cv
@@ -921,7 +921,7 @@ psql "postgresql://postgres@localhost:5433/postgres" -c "GRANT ALL PRIVILEGES ON
 
 Add all three to `k8s/external-secret.yaml` under `spec.data`. A key absent here never reaches the pod while ESO still reports `Synced`.
 
-- [ ] **Step 3: Dry-run, then verify the migration on a scratch DB**
+- [x] **Step 3: Dry-run, then verify the migration on a scratch DB**
 
 ```bash
 DRY_RUN=1 ./scripts/deploy.sh
@@ -931,7 +931,7 @@ CV_DATABASE_URL=postgresql://cv_app@localhost:5433/cv_scratch npm run start:prod
 
 Expected: migrations apply cleanly; `cv_profile`, `cv_master`, `cv_fact` exist. Drop the scratch DB.
 
-- [ ] **Step 4: Commit and let auto-deploy run**
+- [x] **Step 4: Commit and let auto-deploy run**
 
 ```bash
 git add k8s/
@@ -939,7 +939,7 @@ git commit -m "feat: deployment wiring for cv-tuning phase 1"
 git push
 ```
 
-- [ ] **Step 5: Verify by pod age, not log lines**
+- [x] **Step 5: Verify by pod age, not log lines**
 
 ```bash
 ../shared/scripts/deploy-queue/queuectl.sh status

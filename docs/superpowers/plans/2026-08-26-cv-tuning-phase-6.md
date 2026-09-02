@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # CV Tuning Phase 6 Implementation Plan — Cover Letters, Screening Answers, Proof-of-Work Surfacing
@@ -135,7 +135,7 @@ it a first-class output, deterministically.
 "include the candidate's portfolio links" will eventually reformat, truncate, or invent one, and a
 broken link presented as a working one is worse than no link. Selection and formatting are code.
 
-- [ ] Create `src/master/proof.ts`:
+- [x] Create `src/master/proof.ts`:
   - `PROOF_URL = /\bhttps?:\/\/[^\s<>()\[\]]+/gi` — deliberately conservative; trailing
     punctuation is stripped separately rather than baked into the pattern.
   - `export interface ProofItem { factId: string; label: string; url: string | null; text: string }`
@@ -148,10 +148,10 @@ broken link presented as a working one is worse than no link. Selection and form
     `kind === 'proof'`, preserves array order (first appearance, for the same
     determinism-by-contract reason `buildRenderMarkdown` orders that way), de-duplicates by
     normalised URL where a URL exists and by normalised label where it does not.
-- [ ] Create `src/master/proof.spec.ts` covering: a bare URL; a URL with trailing punctuation; a
+- [x] Create `src/master/proof.spec.ts` covering: a bare URL; a URL with trailing punctuation; a
   `label — url` form; a proof fact with no URL at all (must survive with `url: null`); two facts
   citing the same URL with different labels (one item, first label wins); order preservation.
-- [ ] Run `npx jest src/master/proof.spec.ts`.
+- [x] Run `npx jest src/master/proof.spec.ts`.
 
 **Verify:** before writing the implementation, confirm the test file fails for the right reason
 (module not found), not because of a typo in the import path.
@@ -160,23 +160,23 @@ broken link presented as a working one is worse than no link. Selection and form
 
 ## Task 2: Surface proof facts in the CV render
 
-- [ ] In `src/applications/render-markdown.ts`, after the existing section loop and **before** the
+- [x] In `src/applications/render-markdown.ts`, after the existing section loop and **before** the
   `Additional Highlights` catch-all, emit a `## Proof of Work` section from
   `selectProofFacts(facts)` — one `- ` line per item, formatted `label — url` when a URL exists and
   `label` alone when it does not.
-- [ ] The section is emitted **only** when at least one proof item exists. An empty heading in a CV
+- [x] The section is emitted **only** when at least one proof item exists. An empty heading in a CV
   is a defect the reader sees.
-- [ ] Ordering: proof items in `selectProofFacts` order, which is facts-array order. This is a new
+- [x] Ordering: proof items in `selectProofFacts` order, which is facts-array order. This is a new
   ordering contract; add it to the existing determinism test in `render-markdown.spec.ts` rather
   than a new file, so the byte-stability assertions stay in one place.
-- [ ] **Critical:** the proof section is derived from the render's `FactSnapshot[]`, not from the
+- [x] **Critical:** the proof section is derived from the render's `FactSnapshot[]`, not from the
   bullets array. A proof link is not a tailored claim and has no `sourceFactId` binding — it is
   reproduced verbatim, which is exactly why it needs no entailment pass.
-- [ ] Add tests to `render-markdown.spec.ts`: proof section present and correctly placed; absent
+- [x] Add tests to `render-markdown.spec.ts`: proof section present and correctly placed; absent
   when no proof facts; three-pass byte-stability still holds with a proof section present (the
   `confirmClaim` re-render path re-parses its own output — a new section must not perturb the
   contact-block extraction between the H1 and the first `## `).
-- [ ] Run `npx jest src/applications/render-markdown.spec.ts src/applications/bullet-id-artifact-stability.spec.ts`.
+- [x] Run `npx jest src/applications/render-markdown.spec.ts src/applications/bullet-id-artifact-stability.spec.ts`.
 
 **Verify:** the artifact-stability suite must stay green. If a sha256 assertion there changes, the
 proof section leaked into a hash a test pins for a fixture with no proof facts — investigate rather
@@ -186,7 +186,7 @@ than re-baselining.
 
 ## Task 3: Supplement types and table
 
-- [ ] Create `src/applications/supplement.types.ts`:
+- [x] Create `src/applications/supplement.types.ts`:
   - `export const SUPPLEMENT_KINDS = ['cover_letter', 'screening'] as const;` + type.
   - `export const QUESTION_SOURCES = ['user', 'parsed'] as const;` + type. Kept distinguishable on
     the row: a question the user pasted from a real portal and a question the parser guessed from
@@ -195,7 +195,7 @@ than re-baselining.
   - `export interface CoverLetterParagraph { text: string; sourceFactId: string; targetRequirement: string | null; verdict: EntailmentVerdict; span: string | null }`
   - `export interface ScreeningAnswer { question: string; questionSource: QuestionSource; paragraphs: CoverLetterParagraph[]; droppedParagraphs: { text: string; reason: string }[] }`
   - `export interface SupplementProvenance { paragraphs: CoverLetterParagraph[]; droppedParagraphs: { text: string; reason: string }[]; answers?: ScreeningAnswer[] }`
-- [ ] Create `src/applications/entities/cv-supplement.entity.ts`, mirroring `CvRenderEntity`'s
+- [x] Create `src/applications/entities/cv-supplement.entity.ts`, mirroring `CvRenderEntity`'s
   discipline:
   - `id` uuid PK; `applicationId` uuid indexed; `kind` text; `revisionNo` int;
     `@Unique('uq_supplement_revision', ['applicationId', 'kind', 'revisionNo'])`.
@@ -208,12 +208,12 @@ than re-baselining.
   - `idempotencyKey` text with a **unique** index, so a retried request cannot double-spend a
     generation — same rule as `cv_render`.
   - `createdAt` timestamptz.
-- [ ] Create `src/database/migrations/1756900000000-CreateSupplementTables.ts` with `up` and a real
+- [x] Create `src/database/migrations/1756900000000-CreateSupplementTables.ts` with `up` and a real
   `down`. Follow the exact style of `1756500000000-CreatePhase4Tables.ts` (raw SQL, explicit index
   names).
-- [ ] Register the entity in `src/applications/applications.module.ts` and wherever the entity list
+- [x] Register the entity in `src/applications/applications.module.ts` and wherever the entity list
   is enumerated for TypeORM.
-- [ ] Run `npm run typecheck`.
+- [x] Run `npm run typecheck`.
 
 **Verify:** migrations run via `migrationsRun: true` at boot and there is **no standalone
 data-source** (recorded trap). Do not attempt `typeorm migration:run`. To check the SQL, write a
@@ -223,7 +223,7 @@ throwaway `DataSource` script against a scratch database — never against produ
 
 ## Task 4: Cover letter prompt
 
-- [ ] Create `src/applications/cover-letter.prompt.ts`:
+- [x] Create `src/applications/cover-letter.prompt.ts`:
   - `export const COVER_LETTER_PROMPT_VERSION = 'cover-letter-v1';`
   - `COVER_LETTER_SYSTEM_PROMPT` — modelled on `TAILOR_SYSTEM_PROMPT`, with the same hard rules
     renumbered for paragraphs:
@@ -244,14 +244,14 @@ throwaway `DataSource` script against a scratch database — never against produ
   - `export interface CoverLetterPromptInput { facts; requirements; jobTitle; company; language; styleExemplars; tone: 'plain' | 'warm' }` and
     `buildCoverLetterPrompt(input)`. `tone` selects one extra prompt line and nothing else; it must
     not relax any hard rule.
-- [ ] **Do not** put `company` or `jobTitle` in the output schema. They are inputs the model reads
+- [x] **Do not** put `company` or `jobTitle` in the output schema. They are inputs the model reads
   and code writes — never fields the model returns.
 
 ---
 
 ## Task 5: Cover letter service (layer 1)
 
-- [ ] Create `src/applications/cover-letter.service.ts`, structurally parallel to
+- [x] Create `src/applications/cover-letter.service.ts`, structurally parallel to
   `tailor.service.ts`:
   - `constructor(private readonly ai: AiClientService) {}`
   - `async generate(input: CoverLetterPromptInput): Promise<CoverLetterResult>` where
@@ -267,7 +267,7 @@ throwaway `DataSource` script against a scratch database — never against produ
   - Enforce the source constraint in code: unknown `sourceFactId` → dropped with reason
     `unknown source fact`; already-used `sourceFactId` → dropped with reason `duplicate source fact`;
     empty text → dropped. Every drop is recorded in `droppedParagraphs`, never silently discarded.
-- [ ] Create `src/applications/cover-letter.service.spec.ts` over a fake `AiClientService`:
+- [x] Create `src/applications/cover-letter.service.spec.ts` over a fake `AiClientService`:
   - happy path: three paragraphs, three known facts, none dropped;
   - a paragraph citing a fact absent from the snapshot is dropped with a reason and does not reach
     the output;
@@ -275,7 +275,7 @@ throwaway `DataSource` script against a scratch database — never against produ
   - `degraded: true` → rejects, and the rejection message names the model;
   - zero facts → no model call at all (assert the fake was never invoked);
   - a fenced ```` ```json ```` completion parses.
-- [ ] Run `npx jest src/applications/cover-letter.service.spec.ts`.
+- [x] Run `npx jest src/applications/cover-letter.service.spec.ts`.
 
 ---
 
@@ -283,7 +283,7 @@ throwaway `DataSource` script against a scratch database — never against produ
 
 This is the task that keeps the "every model sentence binds to a fact" invariant absolute.
 
-- [ ] Create `src/applications/cover-letter-render.ts`:
+- [x] Create `src/applications/cover-letter-render.ts`:
   - `export interface LetterParts { candidateName: string; contactLine: string | null; jobTitle: string | null; company: string | null; paragraphs: string[]; language: string }`
   - `export function buildCoverLetterMarkdown(parts: LetterParts): string`
   - Salutation, opening line, and closing are **built here, in code**, from `jobTitle`/`company`
@@ -299,29 +299,29 @@ This is the task that keeps the "every model sentence binds to a fact" invariant
   - `candidateName` and `contactLine` come from the master CV's own H1 and contact block, via the
     same extraction `render-markdown.ts` already performs. Reuse that helper; do not re-implement
     the parse.
-- [ ] Create `src/applications/cover-letter-render.spec.ts`: full letter; null company; null job
+- [x] Create `src/applications/cover-letter-render.spec.ts`: full letter; null company; null job
   title; both null; a paragraph containing an em dash (must survive — this is prose, not a heading,
   so the `normalizeHeadingField` rewrite does **not** apply here); two identical calls produce
   byte-identical output.
-- [ ] Run `npx jest src/applications/cover-letter-render.spec.ts`.
+- [x] Run `npx jest src/applications/cover-letter-render.spec.ts`.
 
 ---
 
 ## Task 7: Screening questions — two sources, kept distinct
 
-- [ ] In `src/jobs/job.types.ts` add:
+- [x] In `src/jobs/job.types.ts` add:
   - `export interface ScreeningQuestion { text: string; source: QuestionSource }` (import the type
     from `supplement.types.ts`, or define `QUESTION_SOURCES` here and re-export — pick one home and
     keep it single).
   - Extend `ParsedRequirements` with `screeningQuestions: string[]`.
-- [ ] In `src/jobs/job-parser.service.ts`, add screening-question extraction to the existing parse
+- [x] In `src/jobs/job-parser.service.ts`, add screening-question extraction to the existing parse
   call — extend the existing `OUTPUT_SCHEMA` and system prompt rather than making a second LLM call
   for it. The instruction must be conservative: *return only questions the posting explicitly asks
   the applicant to answer; return an empty array if it asks none.* A posting that asks nothing is
   the common case and must not be padded.
-- [ ] Add `screeningQuestions` jsonb (default `'[]'`) to `src/jobs/entities/cv-job.entity.ts` and
+- [x] Add `screeningQuestions` jsonb (default `'[]'`) to `src/jobs/entities/cv-job.entity.ts` and
   migration `1757000000000-AddJobScreeningQuestions.ts`.
-- [ ] Create `src/applications/screening-questions.ts`:
+- [x] Create `src/applications/screening-questions.ts`:
   - `export function mergeQuestions(user: string[], parsed: string[]): ScreeningQuestion[]` —
     normalises (trim, collapse whitespace, strip a trailing `?` for comparison only), drops empties,
     de-duplicates case-insensitively, and **user wins on a tie**, keeping the user's original
@@ -329,10 +329,10 @@ This is the task that keeps the "every model sentence binds to a fact" invariant
     one is an inference.
   - Order: all user questions in their given order, then parsed questions not already present. The
     user's list is the one they will paste answers back into.
-- [ ] Create `src/applications/screening-questions.spec.ts`: user-only; parsed-only; overlap with
+- [x] Create `src/applications/screening-questions.spec.ts`: user-only; parsed-only; overlap with
   different casing and a stray `?` (one entry, `source: 'user'`); empty inputs → empty array;
   whitespace-only entries dropped.
-- [ ] Run `npx jest src/applications/screening-questions.spec.ts` and the jobs parser suite.
+- [x] Run `npx jest src/applications/screening-questions.spec.ts` and the jobs parser suite.
 
 **Verify:** extending an existing prompt's schema is a prompt change. `job-parser.service.ts` is
 **not** covered by the grounding eval (which fixtures tailoring and entailment only), so no eval
@@ -343,7 +343,7 @@ re-run is required — but do re-run the full jobs suite, since `fit-scorer.serv
 
 ## Task 8: Screening prompt and service
 
-- [ ] Create `src/applications/screening.prompt.ts`, same shape as the cover-letter prompt:
+- [x] Create `src/applications/screening.prompt.ts`, same shape as the cover-letter prompt:
   - `SCREENING_PROMPT_VERSION = 'screening-v1'`.
   - System prompt hard rules: one answer paragraph binds to exactly one fact; never introduce
     facts not present; **if no fact supports an honest answer, return no paragraph for that
@@ -354,7 +354,7 @@ re-run is required — but do re-run the full jobs suite, since `fit-scorer.serv
   - The `question` the model echoes back is matched against the input list in code; an answer whose
     question is not in the list is dropped with a reason. The model does not get to invent
     questions.
-- [ ] Create `src/applications/screening.service.ts`:
+- [x] Create `src/applications/screening.service.ts`:
   - One model call for all questions (they share the same fact set; N calls would N-fold the cost
     and the timeout exposure for no grounding benefit).
   - Same degraded-model refusal, same fenced-JSON parsing, same enforce-in-code source constraint
@@ -363,17 +363,17 @@ re-run is required — but do re-run the full jobs suite, since `fit-scorer.serv
   - A question with zero surviving paragraphs is returned with an empty `paragraphs` array and its
     drops recorded. It is **shown to the user as unanswered**, never omitted from the response —
     silently dropping it would leave the user to discover the gap on the employer's form.
-- [ ] Create `src/applications/screening.service.spec.ts`: happy path over three questions; an
+- [x] Create `src/applications/screening.service.spec.ts`: happy path over three questions; an
   echoed question not in the input list is dropped; the same fact used by two different questions
   is allowed; the same fact twice within one question is dropped; a question with no supportable
   answer returns present-but-empty; degraded → rejects; zero facts → no model call.
-- [ ] Run `npx jest src/applications/screening.service.spec.ts`.
+- [x] Run `npx jest src/applications/screening.service.spec.ts`.
 
 ---
 
 ## Task 9: Supplements orchestration
 
-- [ ] Create `src/applications/supplements.service.ts`. It owns the pipeline both kinds share:
+- [x] Create `src/applications/supplements.service.ts`. It owns the pipeline both kinds share:
   1. Load the application, assert ownership by `userId` (404 for another user's row — the same
      shape the existing service uses; do not invent a 403).
   2. Load the pinned `masterVersionId` snapshot — **never** `is_current` (spec §4.2, immutability
@@ -395,64 +395,64 @@ re-run is required — but do re-run the full jobs suite, since `fit-scorer.serv
   - **The application's `state` is not touched.** A supplement is an accompanying artefact, not a
     step in the CV state machine; advancing `in_review` → anything from here would corrupt a
     machine Phases 4 and 5 built guards around.
-- [ ] `list(userId, applicationId)`, `get(userId, applicationId, kind, revisionNo)`.
-- [ ] `export(userId, applicationId, kind, revisionNo, artifactKind)`: render through
+- [x] `list(userId, applicationId)`, `get(userId, applicationId, kind, revisionNo)`.
+- [x] `export(userId, applicationId, kind, revisionNo, artifactKind)`: render through
   `cv-document.ts` and the existing PDF/DOCX writers, store in MinIO, record a `cv_artifact` row.
   Reuse `CvPdfService`'s existing raise-on-unencodable-character behaviour untouched — it already
   points the caller at DOCX.
-- [ ] Create `src/applications/supplements.service.spec.ts` over injected fakes covering: cover
+- [x] Create `src/applications/supplements.service.spec.ts` over injected fakes covering: cover
   letter end to end; an `overreach` verdict drops its paragraph and records the span; screening
   with one unanswerable question; a second POST with the same body returns the existing row rather
   than generating again; another user's application → 404; a supplement generated against the
   pinned master, not the current one (assert with a master that has since changed).
-- [ ] Run `npx jest src/applications/supplements.service.spec.ts`.
+- [x] Run `npx jest src/applications/supplements.service.spec.ts`.
 
 ---
 
 ## Task 10: Controller, DTOs, export shape
 
-- [ ] `src/applications/dto/generate-cover-letter.dto.ts`: optional `tone` (`plain` | `warm`,
+- [x] `src/applications/dto/generate-cover-letter.dto.ts`: optional `tone` (`plain` | `warm`,
   validated against the union), optional `language` (defaults to the render language).
-- [ ] `src/applications/dto/generate-screening.dto.ts`: `questions?: string[]` (each non-empty
+- [x] `src/applications/dto/generate-screening.dto.ts`: `questions?: string[]` (each non-empty
   after trim, capped at a sane count — 25 — so a paste accident cannot build an unbounded prompt),
   optional `language`.
-- [ ] Routes on `applications.controller.ts`, all under the existing `@UseGuards(CvAuthGuard)`:
+- [x] Routes on `applications.controller.ts`, all under the existing `@UseGuards(CvAuthGuard)`:
   - `POST :id/cover-letter`
   - `POST :id/screening`
   - `GET :id/supplements`
   - `GET :id/supplements/:kind/:revisionNo`
   - `GET :id/supplements/:kind/:revisionNo/download/:artifactKind`
-- [ ] Validate `:kind` against `SUPPLEMENT_KINDS` and `:revisionNo` as a positive integer **before**
+- [x] Validate `:kind` against `SUPPLEMENT_KINDS` and `:revisionNo` as a positive integer **before**
   the lookup, returning 400. Recorded trap: `cv_application.id` is a uuid column and a malformed
   path segment reaching Postgres surfaces as a bare 500, which callers classify as transient and
   retry. Malformed request must stay a permanent 4xx.
-- [ ] Extend `src/export/cv-document.ts` with a second document shape (a titled block of
+- [x] Extend `src/export/cv-document.ts` with a second document shape (a titled block of
   paragraphs, plus an optional question/answer list) and render it in both
   `cv-pdf.service.ts` and `cv-docx.service.ts`. **One model, two writers** — the existing rule.
   Never let one writer grow a field the other lacks.
-- [ ] The download endpoint 404s on a missing artifact and **never regenerates one** — a
+- [x] The download endpoint 404s on a missing artifact and **never regenerates one** — a
   regenerated file could differ from what the user approved. Same rule as the CV download.
-- [ ] Add controller tests to the existing applications controller spec.
-- [ ] Run `npm test`.
+- [x] Add controller tests to the existing applications controller spec.
+- [x] Run `npm test`.
 
 ---
 
 ## Task 11: Full gate, config, and documentation
 
-- [ ] `npm test` — full gate. Expect suites and cases up from the 45/518 baseline; **skipped must
+- [x] `npm test` — full gate. Expect suites and cases up from the 45/518 baseline; **skipped must
   still be exactly 11**. A higher skip count means an integration test regressed.
-- [ ] No new environment variables are required: this phase adds no outbound integration. If a task
+- [x] No new environment variables are required: this phase adds no outbound integration. If a task
   introduced one, it must be added to `k8s/configmap.yaml` **and** documented here — do not leave
   it implicit.
-- [ ] Update `STATE.json`: phase 6 → `done`, phase 7 → `next`, new test counts, and any trap this
+- [x] Update `STATE.json`: phase 6 → `done`, phase 7 → `next`, new test counts, and any trap this
   work discovered. Record explicitly that `EntailService` is now shared by three generators, so a
   change to its signature has three call sites.
-- [ ] Update `CLAUDE.md` with a Phase 6 architecture paragraph: the `EntailService` reuse, the
+- [x] Update `CLAUDE.md` with a Phase 6 architecture paragraph: the `EntailService` reuse, the
   code-built connective prose, the two question sources kept distinguishable, and the
   deterministic proof surfacing.
-- [ ] Commit to `main` and let the deploy queue pick it up. Confirm with
+- [x] Commit to `main` and let the deploy queue pick it up. Confirm with
   `shared/scripts/deploy-queue/queuectl.sh status`, do **not** run `deploy.sh` by hand.
-- [ ] Probe the new routes from inside the pod **via its podIP, not localhost** (recorded trap —
+- [x] Probe the new routes from inside the pod **via its podIP, not localhost** (recorded trap —
   the app does not bind loopback):
 
 ```bash

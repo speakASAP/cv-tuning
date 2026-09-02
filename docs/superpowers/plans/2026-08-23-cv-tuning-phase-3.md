@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # cv-tuning Phase 3 — Tailoring, Grounding, and Diff Implementation Plan
@@ -70,7 +70,7 @@ Boundaries: `tailor` and `entail` are each pure over their inputs plus one AI ca
 - Consumes: `CvJobEntity`, `CvMasterEntity`, `CvFactEntity`
 - Produces: `CvApplicationEntity`, `CvRenderEntity`, `ApplicationState`
 
-- [ ] **Step 1: Types**
+- [x] **Step 1: Types**
 
 ```ts
 export const APPLICATION_STATES = [
@@ -95,17 +95,17 @@ export interface TailoredBullet {
 }
 ```
 
-- [ ] **Step 2: Entities**
+- [x] **Step 2: Entities**
 
 `cv_application` carries `masterVersionId` (the immutable pin), `jobId`, `state`, `bpcpInstanceId`, `outcome`, `renderLanguage`. `cv_render` carries `revisionNo`, `markdown`, `factsSnapshot`, `provenance`, `fitScore`, `gaps`, `aiTellScore`, `createdBy`, `modelUsed`, `validatorModelUsed`, `requestedTier`, `degraded`, `promptVersion`, `idempotencyKey` (unique).
 
 Unique constraint on `(applicationId, revisionNo)` — two concurrent generations must not both claim revision 2.
 
-- [ ] **Step 3: Migration, applied to a scratch DB first**
+- [x] **Step 3: Migration, applied to a scratch DB first**
 
 Take the deploy lock before `docker run` (single node, single containerd). Remove the container afterwards; an orphan `cv-test-pg` blocks the next run with `name is reserved`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
   - Entities registered, `synchronize` still false
   - Migration up/down clean on scratch Postgres
   - `npm run build`
@@ -121,19 +121,19 @@ Take the deploy lock before `docker run` (single node, single containerd). Remov
 - Consumes: `AiClientService`, master facts, parsed requirements
 - Produces: `TailorResult { bullets: TailoredBullet[]; modelUsed: string; promptVersion: string }`
 
-- [ ] **Step 1: Prompt, versioned**
+- [x] **Step 1: Prompt, versioned**
 
 `export const TAILOR_PROMPT_VERSION = 'tailor-v1'` — persisted on every render so a later eval can attribute a regression to a prompt change.
 
 The prompt must state: every output bullet is a rewrite of exactly one input bullet; return its `sourceFactId`; never merge two facts into one bullet; never introduce a number, title, team size, or technology not present in the source fact. Include the anti-AI-voice blocklist from §6.1 (*leveraged, spearheaded, passionate about, results-driven, proven track record*) and pass the user's own phrasing as style exemplars.
 
-- [ ] **Step 2: Enforce the source constraint in code, not only in the prompt**
+- [x] **Step 2: Enforce the source constraint in code, not only in the prompt**
 
 The prompt is a request; the code is the guarantee. Drop any bullet whose `sourceFactId` is unknown or absent, and log at error level with the bullet text — a dropped bullet is a real failure, not a tidy-up.
 
-- [ ] **Step 3: Refuse a degraded model**
+- [x] **Step 3: Refuse a degraded model**
 
-- [ ] **Step 4: Tests (write first, watch them fail)**
+- [x] **Step 4: Tests (write first, watch them fail)**
   - rewrites a master bullet toward a requirement
   - **drops a bullet citing an unknown `sourceFactId`** ← disable the check, must go red
   - **drops a bullet citing no source at all** ← same
@@ -155,21 +155,21 @@ House shape to copy: `ai-microservice/src/teacher-assistant/validate.{prompt,sch
 - Consumes: `AiClientService`, `TailoredBullet[]`, the facts each cites
 - Produces: bullets with `verdict` and `span` populated, plus `validatorModelUsed`
 
-- [ ] **Step 1: Prompt and schema, separate from generation**
+- [x] **Step 1: Prompt and schema, separate from generation**
 
 Per bullet: *is this claim fully supported by these facts?* → `supported | unsupported | overreach`, plus the offending span. `overreach` means the claim goes beyond the fact while staying adjacent to it ("Senior Developer" → "Led a team of 12"); `unsupported` means no basis at all.
 
-- [ ] **Step 2: Downgrade discipline — copy the house rule**
+- [x] **Step 2: Downgrade discipline — copy the house rule**
 
 `validate.service.ts:149` is explicit that *a downgrade must never destroy the reason for it*. When the model returns a non-supported verdict with no span, synthesize one naming the bullet, rather than dropping the reason.
 
 **A bullet the validator skipped is `unsupported`, never `supported`.** This mirrors the Phase 2 scorer, where a skipped requirement counts as missing. Fail-closed: an unvalidated claim reaching the user as validated is the exact failure this phase exists to prevent.
 
-- [ ] **Step 3: Refuse a degraded validator model**
+- [x] **Step 3: Refuse a degraded validator model**
 
 A degraded *validator* is worse than a degraded generator: it silently stops catching fabrication while still reporting verdicts.
 
-- [ ] **Step 4: Tests (write first, watch them fail)**
+- [x] **Step 4: Tests (write first, watch them fail)**
   - marks a faithful rewrite `supported`
   - marks an invented team size `overreach` with the span
   - marks a wholly invented claim `unsupported`
@@ -185,11 +185,11 @@ A degraded *validator* is worse than a degraded generator: it silently stops cat
 **Files:**
 - Create: `src/applications/ai-tell.ts`, `src/applications/ai-tell.spec.ts`, `src/applications/diff.ts`, `src/applications/diff.spec.ts`
 
-- [ ] **Step 1: `ai-tell.ts`** — blocklist from §6.1, count per 100 words, 0–100. Pure, no AI call. Shown before download.
+- [x] **Step 1: `ai-tell.ts`** — blocklist from §6.1, count per 100 words, 0–100. Pure, no AI call. Shown before download.
 
-- [ ] **Step 2: `diff.ts`** — unified line diff with word-level granularity inside changed lines (§7). Baseline for revision 1 is the master CV markdown, so the first generation is reviewable as a diff too.
+- [x] **Step 2: `diff.ts`** — unified line diff with word-level granularity inside changed lines (§7). Baseline for revision 1 is the master CV markdown, so the first generation is reviewable as a diff too.
 
-- [ ] **Step 3: Tests** — identical input yields no hunks; a single changed word marks only that word; revision 1 diffs against master; empty-to-content and content-to-empty both work.
+- [x] **Step 3: Tests** — identical input yields no hunks; a single changed word marks only that word; revision 1 diffs against master; empty-to-content and content-to-empty both work.
 
 Pure functions, so these tests need no mocks and run in milliseconds.
 
@@ -207,19 +207,19 @@ Pure functions, so these tests need no mocks and run in milliseconds.
 - `GET /api/applications/:id/renders/:revisionNo/diff` — diff vs previous revision (or master for revision 1)
 - `POST /api/applications/:id/regenerate` — new revision, same pin
 
-- [ ] **Step 1: Pin the master at creation.** Read `is_current` once, store the id, never re-read it.
+- [x] **Step 1: Pin the master at creation.** Read `is_current` once, store the id, never re-read it.
 
-- [ ] **Step 2: Snapshot facts into the render** so it is reproducible after the master changes.
+- [x] **Step 2: Snapshot facts into the render** so it is reproducible after the master changes.
 
-- [ ] **Step 3: Record full model attribution** — both models, tier, degraded flag, prompt version (§8.0).
+- [x] **Step 3: Record full model attribution** — both models, tier, degraded flag, prompt version (§8.0).
 
-- [ ] **Step 4: `generation_failed` carries the error** (§5), never a stuck `generating`.
+- [x] **Step 4: `generation_failed` carries the error** (§5), never a stuck `generating`.
 
-- [ ] **Step 5: Idempotency key** on `(applicationId, revisionNo, promptVersion)` so a retried request does not double-spend a generation.
+- [x] **Step 5: Idempotency key** on `(applicationId, revisionNo, promptVersion)` so a retried request does not double-spend a generation.
 
-- [ ] **Step 6: Tenancy** — every query scoped by token `userId`; test cross-tenant read *and* write.
+- [x] **Step 6: Tenancy** — every query scoped by token `userId`; test cross-tenant read *and* write.
 
-- [ ] **Step 7: Tests**
+- [x] **Step 7: Tests**
   - creates an application and pins the master version
   - **a later master edit does not change an existing render** ← the §4.2 guarantee; disable the pin, must go red
   - regenerate produces revision 2 without repinning
@@ -236,11 +236,11 @@ Pure functions, so these tests need no mocks and run in milliseconds.
 
 Copy the house harness at `ai-microservice/src/teacher-assistant/__evals__/run-eval.ts`, including its guards: lives under `__evals__/`, filename does not end `.spec.ts` so `testRegex` never collects it, and it refuses to run when `CI` is set.
 
-- [ ] **Step 1: Fixture set** — a small master CV plus postings, including **adversarial cases**: a posting demanding experience the CV does not have (the model must not invent it), and one where a fact is adjacent but not equal to the requirement (must come back `overreach`, not `supported`).
+- [x] **Step 1: Fixture set** — a small master CV plus postings, including **adversarial cases**: a posting demanding experience the CV does not have (the model must not invent it), and one where a fact is adjacent but not equal to the requirement (must come back `overreach`, not `supported`).
 
-- [ ] **Step 2: Report** — per fixture, counts of `supported | unsupported | overreach`, dropped-bullet count, `ai_tell_score`, and both model ids.
+- [x] **Step 2: Report** — per fixture, counts of `supported | unsupported | overreach`, dropped-bullet count, `ai_tell_score`, and both model ids.
 
-- [ ] **Step 3: Record a baseline** in the plan file so a future prompt edit can be diffed against it.
+- [x] **Step 3: Record a baseline** in the plan file so a future prompt edit can be diffed against it.
 
 §6: *"Without evals there is no way to know whether a prompt change regressed grounding."* The harness is the regression net for every later prompt edit, including Phase 8's benchmark.
 
@@ -248,13 +248,13 @@ Copy the house harness at `ai-microservice/src/teacher-assistant/__evals__/run-e
 
 ### Task 7: Verify and deploy
 
-- [ ] Full suite green; confirm the new count against the Phase 2 baseline of 159
-- [ ] `npm run build` clean
-- [ ] Migration applied to scratch Postgres, container removed
-- [ ] For each load-bearing guard, disable it and confirm red: source constraint, skipped-bullet fail-closed, span synthesis, master pin
-- [ ] Take the deploy lock; deploy once at the end
-- [ ] Verify by **pod age against commit time**, not by a banner
-- [ ] Confirm `cv_application` and `cv_render` in the production `cv` database via `kubectl exec` into the pod — `port-forward svc/db-server-postgres` fails, the Service has no selector
+- [x] Full suite green; confirm the new count against the Phase 2 baseline of 159
+- [x] `npm run build` clean
+- [x] Migration applied to scratch Postgres, container removed
+- [x] For each load-bearing guard, disable it and confirm red: source constraint, skipped-bullet fail-closed, span synthesis, master pin
+- [x] Take the deploy lock; deploy once at the end
+- [x] Verify by **pod age against commit time**, not by a banner
+- [x] Confirm `cv_application` and `cv_render` in the production `cv` database via `kubectl exec` into the pod — `port-forward svc/db-server-postgres` fails, the Service has no selector
 
 ---
 

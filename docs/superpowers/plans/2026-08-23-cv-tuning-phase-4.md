@@ -1,7 +1,7 @@
 ---
-status: review
+status: done
 owner: repository-owner
-last_updated: 2026-08-31
+last_updated: 2026-09-02
 ---
 
 # cv-tuning Phase 4 Implementation Plan
@@ -65,13 +65,13 @@ Task 4 registers `ReviseService`, `CvChatEntity`, `CvArtifactEntity`, `ExportMod
 **Files:**
 - Modify: `STATE.json` (record the result)
 
-- [ ] **Step 1: Confirm ai-microservice is reachable**
+- [x] **Step 1: Confirm ai-microservice is reachable**
 
 ```bash
 kubectl get pods -n statex-apps | rtk rg ai-microservice
 ```
 
-- [ ] **Step 2: Run the existing harness**
+- [x] **Step 2: Run the existing harness**
 
 ```bash
 CV_AI_SERVICE_URL=<reachable-url> CV_AI_JWT_SECRET=<ai-microservice JWT_SECRET> \
@@ -80,11 +80,11 @@ CV_AI_SERVICE_URL=<reachable-url> CV_AI_JWT_SECRET=<ai-microservice JWT_SECRET> 
 
 Expected: a table of fixtures with verdict counts. It spends real tokens; run it once.
 
-- [ ] **Step 3: Record the table in STATE.json**
+- [x] **Step 3: Record the table in STATE.json**
 
 Replace the `openItems` entry "Phase 3 eval harness has no recorded baseline yet…" with an `evalBaseline` object holding the date, the prompt versions (`tailor-v1`, the entail version), and the per-fixture verdict counts.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add STATE.json && rtk git commit -m "docs: record Phase 3 grounding eval baseline"
@@ -108,7 +108,7 @@ rtk git add STATE.json && rtk git commit -m "docs: record Phase 3 grounding eval
 - Consumes: `CvRenderEntity`, `CvApplicationEntity` from Phase 3.
 - Produces: `CvChatEntity`, `CvArtifactEntity`, and the types below, used by every later task.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/entities/phase4-entities.spec.ts
@@ -141,12 +141,12 @@ describe('phase 4 entities', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/entities/phase4-entities.spec.ts`
 Expected: FAIL — `Cannot find module './cv-artifact.entity'`
 
-- [ ] **Step 3: Add the shared types**
+- [x] **Step 3: Add the shared types**
 
 Append to `src/applications/application.types.ts`:
 
@@ -173,7 +173,7 @@ export interface ConfirmedClaim {
 }
 ```
 
-- [ ] **Step 4: Create the chat entity**
+- [x] **Step 4: Create the chat entity**
 
 ```typescript
 // src/applications/entities/cv-chat.entity.ts
@@ -212,7 +212,7 @@ export class CvChatEntity {
 }
 ```
 
-- [ ] **Step 5: Create the artifact entity**
+- [x] **Step 5: Create the artifact entity**
 
 ```typescript
 // src/applications/entities/cv-artifact.entity.ts
@@ -252,7 +252,7 @@ export class CvArtifactEntity {
 }
 ```
 
-- [ ] **Step 6: Add the new columns to the existing entities**
+- [x] **Step 6: Add the new columns to the existing entities**
 
 In `src/applications/entities/cv-render.entity.ts`, import `ConfirmedClaim` from `'../application.types'` and add after `createdBy`:
 
@@ -273,7 +273,7 @@ In `src/applications/entities/cv-application.entity.ts`, add after `outcome`:
   revisionCount!: number;
 ```
 
-- [ ] **Step 7: Write the migration**
+- [x] **Step 7: Write the migration**
 
 ```typescript
 // src/database/migrations/1756500000000-CreatePhase4Tables.ts
@@ -328,16 +328,16 @@ export class CreatePhase4Tables1756500000000 implements MigrationInterface {
 }
 ```
 
-- [ ] **Step 8: Register the entities**
+- [x] **Step 8: Register the entities**
 
 In `src/database/database.module.ts`, import both new entities and add `CvChatEntity, CvArtifactEntity` to the `CV_ENTITIES` array.
 
-- [ ] **Step 9: Run tests and typecheck**
+- [x] **Step 9: Run tests and typecheck**
 
 Run: `npx jest src/applications/entities/phase4-entities.spec.ts && npm run typecheck`
 Expected: PASS, no type errors.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 rtk git add src/applications/entities src/applications/application.types.ts src/database && \
@@ -356,7 +356,7 @@ rtk git commit -m "feat: Phase 4 schema — chat turns, artifacts, approval colu
 - Consumes: `AI_TELL_PHRASES` from `./ai-tell`; the `TailorPromptInput` shape from `./tailor.prompt` (fields: `facts`, `requirements`, `jobTitle`, `company`, `language`, `styleExemplars`).
 - Produces: `REVISE_PROMPT_VERSION: string`, `REVISE_SYSTEM_PROMPT: string`, `ReviseTurn`, `RevisePromptInput`, `buildRevisePrompt(input: RevisePromptInput): string`. Reuses `TAILOR_OUTPUT_SCHEMA` — the output shape is identical, so Task 3 can feed the result straight into `EntailService`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/revise.prompt.spec.ts
@@ -401,12 +401,12 @@ describe('buildRevisePrompt', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/revise.prompt.spec.ts`
 Expected: FAIL — `Cannot find module './revise.prompt'`
 
-- [ ] **Step 3: Write the prompt**
+- [x] **Step 3: Write the prompt**
 
 ```typescript
 // src/applications/revise.prompt.ts
@@ -489,12 +489,12 @@ export function buildRevisePrompt(input: RevisePromptInput): string {
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npx jest src/applications/revise.prompt.spec.ts`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/applications/revise.prompt.ts src/applications/revise.prompt.spec.ts && \
@@ -513,7 +513,7 @@ rtk git commit -m "feat: revise prompt with instruction-cannot-override-groundin
 - Consumes: `AiClientService.complete()` from `../ai/ai-client.service`; `buildRevisePrompt`, `REVISE_SYSTEM_PROMPT`, `REVISE_PROMPT_VERSION`, `RevisePromptInput` from `./revise.prompt`; `TAILOR_OUTPUT_SCHEMA` from `./tailor.prompt`; `DraftBullet` and `TailorResult` from `./tailor.service`.
 - Produces: `ReviseService.revise(input: RevisePromptInput): Promise<TailorResult>` — deliberately returns the **same** `TailorResult` shape as `TailorService.tailor()`, so Task 4 feeds it into `EntailService.validate(bullets, facts)` with no adapter.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/revise.service.spec.ts
@@ -573,16 +573,16 @@ describe('ReviseService', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/revise.service.spec.ts`
 Expected: FAIL — `Cannot find module './revise.service'`
 
-- [ ] **Step 3: Read the existing tailor service for the exact parsing shape**
+- [x] **Step 3: Read the existing tailor service for the exact parsing shape**
 
 Read `src/applications/tailor.service.ts` in full. `ReviseService` mirrors its fence-stripping, source-constraint enforcement, and degraded handling. Reuse the same `FENCE` regex and the same drop-with-reason behaviour — do not invent a different one.
 
-- [ ] **Step 4: Write the service**
+- [x] **Step 4: Write the service**
 
 ```typescript
 // src/applications/revise.service.ts
@@ -694,16 +694,16 @@ export class ReviseService {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `npx jest src/applications/revise.service.spec.ts`
 Expected: PASS (4 tests)
 
-- [ ] **Step 6: Verify a test fails when the behaviour breaks**
+- [x] **Step 6: Verify a test fails when the behaviour breaks**
 
 Temporarily change `if (!known.has(sourceFactId))` to `if (false)`. Re-run: the "drops a bullet citing a fact that is not in the snapshot" test MUST fail. Revert.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 rtk git add src/applications/revise.service.ts src/applications/revise.service.spec.ts && \
@@ -725,7 +725,7 @@ rtk git commit -m "feat: ReviseService — revision re-runs constrained generati
 - Consumes: `ReviseService.revise()` (Task 3); `EntailService.validate(bullets, facts)` returning `{ bullets, validatorModelUsed, validatorPromptVersion }`; `CvChatEntity` (Task 1); the existing private `findOwned(userId, applicationId)` and `toView(render)` helpers.
 - Produces: `ApplicationsService.revise(userId, applicationId, instruction, inputMode): Promise<RenderView>`; `ApplicationsService.listChat(userId, applicationId): Promise<CvChatEntity[]>`; private `assertWithinRateLimit(userId)`; constants `MAX_REVISIONS = 20`, `MAX_TURNS_PER_HOUR = 10`, `RATE_WINDOW_MS`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/revise-loop.spec.ts
@@ -861,12 +861,12 @@ describe('ApplicationsService.revise', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/revise-loop.spec.ts`
 Expected: FAIL — `service.revise is not a function`
 
-- [ ] **Step 3: Create the DTO**
+- [x] **Step 3: Create the DTO**
 
 ```typescript
 // src/applications/dto/revise.dto.ts
@@ -884,7 +884,7 @@ export class ReviseDto {
 }
 ```
 
-- [ ] **Step 4: Wire the full Phase 4 constructor**
+- [x] **Step 4: Wire the full Phase 4 constructor**
 
 In `src/applications/applications.service.ts`, replace the constructor with the **complete 12-argument signature** given in Global Constraints — all six new collaborators at once, including the three (`artifacts`, `pdf`, `docx`, `storage`) that only Task 8 uses. Adding them incrementally would change a positional signature that Tasks 4 and 5 have already written tests against.
 
@@ -903,7 +903,7 @@ const MAX_TURNS_PER_HOUR = 10;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 ```
 
-- [ ] **Step 4b: Add the per-user rate limiter**
+- [x] **Step 4b: Add the per-user rate limiter**
 
 The cap and the rate limit bound different things — one application's total spend versus one user's burst — so they raise **distinct** errors. A caller must be able to tell "this application is finished" from "wait an hour".
 
@@ -941,7 +941,7 @@ Call it in `revise` immediately after the cap check:
 
 In the test harness, `chats.find` is already mocked; add `createQueryBuilder` returning a chainable stub whose `getCount()` resolves to the number of turns the test needs.
 
-- [ ] **Step 5: Implement `revise`**
+- [x] **Step 5: Implement `revise`**
 
 ```typescript
   /**
@@ -1092,7 +1092,7 @@ In the test harness, `chats.find` is already mocked; add `createQueryBuilder` re
   }
 ```
 
-- [ ] **Step 6: Add the controller routes**
+- [x] **Step 6: Add the controller routes**
 
 In `src/applications/applications.controller.ts`, import `ReviseDto` and add:
 
@@ -1112,16 +1112,16 @@ In `src/applications/applications.controller.ts`, import `ReviseDto` and add:
   }
 ```
 
-- [ ] **Step 7: Register in the module**
+- [x] **Step 7: Register in the module**
 
 In `src/applications/applications.module.ts`: add `CvChatEntity` to `TypeOrmModule.forFeature([...])` and `ReviseService` to `providers`.
 
-- [ ] **Step 8: Run tests**
+- [x] **Step 8: Run tests**
 
 Run: `npx jest src/applications/revise-loop.spec.ts && npm run typecheck`
 Expected: PASS (8 tests), no type errors.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 rtk git add src/applications && rtk git commit -m "feat: revision loop endpoint with concurrency, cap, and failure recovery"
@@ -1141,7 +1141,7 @@ rtk git add src/applications && rtk git commit -m "feat: revision loop endpoint 
 - Consumes: `ConfirmedClaim` from `./application.types` (Task 1); `RenderView`, `findOwned`, `toView`.
 - Produces: `ApplicationsService.confirmClaim(userId, applicationId, revisionNo, bulletText, decision): Promise<RenderView>`; `ApplicationsService.approve(userId, applicationId): Promise<CvApplicationEntity>`. Task 6 calls `approve` after export is wired.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/approval.spec.ts
@@ -1241,12 +1241,12 @@ describe('approval gate', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/approval.spec.ts`
 Expected: FAIL — `service.approve is not a function`
 
-- [ ] **Step 3: Create the DTO**
+- [x] **Step 3: Create the DTO**
 
 ```typescript
 // src/applications/dto/confirm-claim.dto.ts
@@ -1262,7 +1262,7 @@ export class ConfirmClaimDto {
 }
 ```
 
-- [ ] **Step 4: Implement both methods**
+- [x] **Step 4: Implement both methods**
 
 Add to `ApplicationsService` (import `ConfirmedClaim` from `./application.types`):
 
@@ -1373,7 +1373,7 @@ Add to `ApplicationsService` (import `ConfirmedClaim` from `./application.types`
   }
 ```
 
-- [ ] **Step 5: Add the controller routes**
+- [x] **Step 5: Add the controller routes**
 
 Import `ConfirmClaimDto` from `./dto/confirm-claim.dto`, then add:
 
@@ -1394,16 +1394,16 @@ Import `ConfirmClaimDto` from `./dto/confirm-claim.dto`, then add:
   }
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `npx jest src/applications/approval.spec.ts && npm run typecheck`
 Expected: PASS (7 tests)
 
-- [ ] **Step 7: Verify the gate actually gates**
+- [x] **Step 7: Verify the gate actually gates**
 
 Temporarily change `if (unresolved.length > 0)` to `if (false)`. The "blocks approval while an overreach bullet is unresolved" test MUST fail. Revert.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 rtk git add src/applications && rtk git commit -m "feat: confirm-on-new-claim and the approval gate"
@@ -1421,7 +1421,7 @@ rtk git add src/applications && rtk git commit -m "feat: confirm-on-new-claim an
 - Consumes: nothing (pure function).
 - Produces: `CvDocument`, `CvSection`, `CvEntry`, `CvContact` interfaces and `renderToDocument(markdown: string): CvDocument`. Tasks 7 and 8 both consume `CvDocument` — they never parse Markdown themselves.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/export/cv-document.spec.ts
@@ -1480,12 +1480,12 @@ describe('renderToDocument', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/export/cv-document.spec.ts`
 Expected: FAIL — `Cannot find module './cv-document'`
 
-- [ ] **Step 3: Write the parser**
+- [x] **Step 3: Write the parser**
 
 ```typescript
 // src/export/cv-document.ts
@@ -1594,12 +1594,12 @@ export function renderToDocument(markdown: string): CvDocument {
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npx jest src/export/cv-document.spec.ts`
 Expected: PASS (8 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rtk git add src/export && rtk git commit -m "feat: parse a render into the shared CV document model"
@@ -1620,7 +1620,7 @@ rtk git add src/export && rtk git commit -m "feat: parse a render into the share
 - Consumes: `CvDocument`, `renderToDocument` (Task 6).
 - Produces: `RenderedFile { content: Buffer; sha256: string; mimeType: string; filename: string }`; `CvPdfService.render(markdown: string, filenameBase: string): Promise<RenderedFile>`; `CvDocxService.render(markdown: string, filenameBase: string): Promise<RenderedFile>`; `ExportModule` exporting both. Task 8 calls both.
 
-- [ ] **Step 1: Install the dependencies**
+- [x] **Step 1: Install the dependencies**
 
 ```bash
 npm install pdfkit@^0.19.1 docx && npm install --save-dev @types/pdfkit
@@ -1628,7 +1628,7 @@ npm install pdfkit@^0.19.1 docx && npm install --save-dev @types/pdfkit
 
 `pdfkit@^0.19.1` matches the version already proven in `invoices-microservice`. `docx` is new to the ecosystem — the alternative is hand-writing OOXML.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 ```typescript
 // src/export/cv-pdf.service.spec.ts
@@ -1700,12 +1700,12 @@ describe('CvDocxService', () => {
 
 Note: `adm-zip` and `pdf-parse` are already dependencies — no new test-only installs.
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `npx jest src/export`
 Expected: FAIL — `Cannot find module './cv-pdf.service'`
 
-- [ ] **Step 4: Write the PDF writer**
+- [x] **Step 4: Write the PDF writer**
 
 ```typescript
 // src/export/cv-pdf.service.ts
@@ -1785,7 +1785,7 @@ export class CvPdfService {
 }
 ```
 
-- [ ] **Step 5: Write the DOCX writer**
+- [x] **Step 5: Write the DOCX writer**
 
 ```typescript
 // src/export/cv-docx.service.ts
@@ -1856,7 +1856,7 @@ export class CvDocxService {
 }
 ```
 
-- [ ] **Step 6: Create the module**
+- [x] **Step 6: Create the module**
 
 ```typescript
 // src/export/export.module.ts
@@ -1871,12 +1871,12 @@ import { CvPdfService } from './cv-pdf.service';
 export class ExportModule {}
 ```
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run: `npx jest src/export && npm run typecheck`
 Expected: PASS (9 tests total)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 rtk git add src/export package.json package-lock.json && \
@@ -1897,7 +1897,7 @@ rtk git commit -m "feat: PDF and DOCX writers over one shared document model"
 - Consumes: `CvPdfService.render()`, `CvDocxService.render()` (Task 7); `MinioService.putObject(key, body, contentType)` and `MinioService.getObject(key)` from `../storage/minio.service`; `CvArtifactEntity` (Task 1); `approve()` (Task 5).
 - Produces: `ApplicationsService.download(userId, applicationId, revisionNo, kind): Promise<{ content: Buffer; artifact: CvArtifactEntity }>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // src/applications/export-on-approve.spec.ts
@@ -1980,19 +1980,19 @@ describe('export on approve', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx jest src/applications/export-on-approve.spec.ts`
 Expected: FAIL — `service.download is not a function`
 
-- [ ] **Step 3: Confirm the constructor already has what this task needs**
+- [x] **Step 3: Confirm the constructor already has what this task needs**
 
 Task 4 wired the full 12-argument constructor, so `artifacts`, `pdf`, `docx`, and `storage` are already injected. Nothing to change here — verify with:
 
 Run: `rtk rg -n "private readonly storage" src/applications/applications.service.ts`
 Expected: one match.
 
-- [ ] **Step 4: Add the export step to `approve`**
+- [x] **Step 4: Add the export step to `approve`**
 
 Replace the end of `approve` (after the `state: 'approved'` update) with:
 
@@ -2077,7 +2077,7 @@ Replace the end of `approve` (after the `state: 'approved'` update) with:
   }
 ```
 
-- [ ] **Step 5: Add the download route**
+- [x] **Step 5: Add the download route**
 
 ```typescript
   @Get(':id/renders/:revisionNo/download/:kind')
@@ -2101,19 +2101,19 @@ Replace the end of `approve` (after the `state: 'approved'` update) with:
 
 Add imports: `BadRequestException`, `Res` from `@nestjs/common`, and `Response` from `express`.
 
-- [ ] **Step 6: Confirm the module is already wired**
+- [x] **Step 6: Confirm the module is already wired**
 
 Task 4 registered `CvArtifactEntity`, `ExportModule`, and `StorageModule`. Verify:
 
 Run: `rtk rg -n "ExportModule|StorageModule|CvArtifactEntity" src/applications/applications.module.ts`
 Expected: three matches. If any is missing, add it now.
 
-- [ ] **Step 7: Run the full suite**
+- [x] **Step 7: Run the full suite**
 
 Run: `npm test`
 Expected: all suites pass; skipped count unchanged from the Phase 3 baseline (11).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 rtk git add src package.json && rtk git commit -m "feat: generate PDF/DOCX on approve, serve them on download"
@@ -2130,11 +2130,11 @@ rtk git add src package.json && rtk git commit -m "feat: generate PDF/DOCX on ap
 - Consumes: `ReviseService` (Task 3), `EntailService`, `AiClientService`, `scoreAiTell`.
 - Produces: revision fixtures in the existing eval table.
 
-- [ ] **Step 1: Read the existing harness**
+- [x] **Step 1: Read the existing harness**
 
 Read `src/applications/__evals__/run-eval.ts` in full. Keep its structure, its CI guard, and its table output. The new fixtures extend it — they do not replace it.
 
-- [ ] **Step 2: Add the revision fixtures**
+- [x] **Step 2: Add the revision fixtures**
 
 Add a `REVISION_FIXTURES` array alongside the existing `FIXTURES`, each with the base facts, a starting render, and an instruction designed to smuggle a claim:
 
@@ -2176,12 +2176,12 @@ const REVISION_FIXTURES: RevisionFixture[] = [
 
 Run each through `ReviseService.revise()` then `EntailService.validate()`, and print the same columns the existing table uses plus the instruction label. The `legitimate-tightening` control matters as much as the smuggle cases: a model that refuses everything scores perfectly on fabrication and is useless.
 
-- [ ] **Step 3: Verify the harness is still excluded from jest**
+- [x] **Step 3: Verify the harness is still excluded from jest**
 
 Run: `npx jest --listTests | rtk rg run-eval`
 Expected: no output — `testRegex` is `.*\.spec\.ts$`, so `run-eval.ts` must never be collected.
 
-- [ ] **Step 4: Run the harness against live models**
+- [x] **Step 4: Run the harness against live models**
 
 ```bash
 CV_AI_SERVICE_URL=<url> CV_AI_JWT_SECRET=<secret> rtk npx ts-node src/applications/__evals__/run-eval.ts
@@ -2189,7 +2189,7 @@ CV_AI_SERVICE_URL=<url> CV_AI_JWT_SECRET=<secret> rtk npx ts-node src/applicatio
 
 Compare the Phase 3 fixtures against the Task 0 baseline: **they must be unchanged**. A drift there means a Phase 4 change regressed Phase 3 grounding.
 
-- [ ] **Step 5: Record the Phase 4 results in STATE.json and commit**
+- [x] **Step 5: Record the Phase 4 results in STATE.json and commit**
 
 ```bash
 rtk git add src/applications/__evals__/run-eval.ts STATE.json && \
@@ -2205,20 +2205,20 @@ rtk git commit -m "test: revision eval fixtures for claim-smuggling instructions
 - Modify: `README.md` (status line)
 - Modify: `CLAUDE.md` (Phase 4 surfaces in the architecture section)
 
-- [ ] **Step 1: Update STATE.json**
+- [x] **Step 1: Update STATE.json**
 
 Set `phases.4.status` to `"done"`, `phases.5.status` to `"next"`, refresh `tests.suites`/`tests.cases` from the actual `npm test` output, and add any new trap discovered during implementation.
 
-- [ ] **Step 2: Update CLAUDE.md**
+- [x] **Step 2: Update CLAUDE.md**
 
 In the `applications/` paragraph, add the revision loop, the approval gate, and `export/` with its one-model-two-writers rule.
 
-- [ ] **Step 3: Run the full suite one final time**
+- [x] **Step 3: Run the full suite one final time**
 
 Run: `npm test`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 rtk git add STATE.json README.md CLAUDE.md && \
