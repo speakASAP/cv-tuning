@@ -232,17 +232,15 @@ BPCP restart. The wait action carries `onTimeout: 'continue'`, never `'fail'`: f
 would never dispatch the nudge, which is the entire point of the timer.
 
 **notifications/** — `NudgeController` (`POST /api/nudges/outcome`) is the BPCP action callback and
-is deliberately **not** under `CvAuthGuard`: BPCP's dispatcher posts plain JSON with no user
-credential, so a user-token guard would reject every call and the only symptom would be instances
-stuck in BPCP. It is protected by the `x-cv-nudge-secret` shared-secret header. That header is now
-the **only** protection: the service has been publicly exposed since Phase 7 (`k8s/ingress.yaml`,
-`cv.alfares.cz`), so the earlier "no ingress" second layer is gone — a POST from the internet
-reaches this controller and is rejected with 403 by the secret check alone (verified 2026-09-05).
-Treat `CV_NUDGE_CALLBACK_SECRET` as an internet-facing credential: it must be strong, and rotating
-it means restarting BPCP so the workflow document's `${env:...}` resolves to the new value. The
-secret travels as `${env:CV_NUDGE_CALLBACK_SECRET}` in the
-workflow document, resolved by BPCP's dispatcher at send time, so it never lives in a document that
-is stored, listed over an API, and committed. The nudge is **sent before** `nudgedAt` is stamped:
+is deliberately **not** under `CvAuthGuard`: BPCP posts plain JSON with no user credential, so a
+user-token guard would reject every call and the only symptom would be instances stuck in BPCP. It is
+a service-to-service route, so its identity, credential, role and validation come only from
+[`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md)
+— an Auth-issued `(business-process-control-plane -> cv-tuning)` RS256 credential checked against a
+declared service role. The route is publicly reachable since Phase 7 (`k8s/ingress.yaml`,
+`cv.alfares.cz`), so nothing else stands in front of it. Any custom shared-secret header on this route
+is a non-conforming residue to remove, never a protocol to extend or document; do not mint, share or
+print a credential for it. The nudge is **sent before** `nudgedAt` is stamped:
 stamping first would mark delivered a nudge that never left the building and the user would never be
 asked again, whereas a crash between the two can at worst nudge twice. Unlike `BpcpClientService`, an
 unset base url here *raises* — it is only ever reached when a nudge is already due.

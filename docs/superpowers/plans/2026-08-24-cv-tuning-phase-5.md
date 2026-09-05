@@ -1262,9 +1262,11 @@ The notifications contract is real, verified against
 `POST /notifications/send` with `{type, recipient, message, subject?, channel?, service?, purpose?}`.
 `type` must be one of the `NotificationType` enum — `custom` is the correct value here.
 
-**BPCP calls this endpoint unauthenticated** (its `ActionDispatcherService` posts plain JSON with
-no credential), so the controller must NOT be under `CvAuthGuard`. It is protected instead by a
-shared secret header, and the endpoint is not in any ingress (Phase 5 has no ingress at all).
+**BPCP calls this endpoint as a service, not as a user** (its `ActionDispatcherService` posts plain
+JSON with no user credential), so the controller must NOT be under `CvAuthGuard`. It is a
+service-to-service call, and its credential, role and validation are governed only by
+[`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md): BPCP presents its Auth-issued
+`(business-process-control-plane -> cv-tuning)` credential and this route declares its service role.
 
 - [x] **Step 1: Write the failing test for the client**
 
@@ -1419,7 +1421,6 @@ const buildController = (opts: {
   application: any;
   job?: any;
   send?: jest.Mock;
-  secret?: string;
 }) => {
   const applications = {
     findOne: jest.fn(async () => opts.application),
@@ -1431,7 +1432,6 @@ const buildController = (opts: {
     applications as any,
     jobs as any,
     client as any,
-    opts.secret ?? 'shhh',
     'owner@example.com',
   );
   return { controller, applications, client };
@@ -1445,7 +1445,7 @@ describe('POST /api/nudges/outcome', () => {
       job: { id: 'job-1', company: 'Acme' },
     });
 
-    await controller.outcomeNudge('shhh', { context: { applicationId: 'app-1' } } as any);
+    await controller.outcomeNudge({ context: { applicationId: 'app-1' } } as any);
 
     expect(client.sendOutcomeNudge).toHaveBeenCalledWith({
       applicationId: 'app-1',
@@ -1455,20 +1455,11 @@ describe('POST /api/nudges/outcome', () => {
     expect(applications.update).toHaveBeenCalledWith('app-1', { nudgedAt: expect.any(Date) });
   });
 
-  it('rejects a caller without the shared secret', async () => {
-    const { controller, client } = buildController({ application: { id: 'app-1' } });
-
-    await expect(
-      controller.outcomeNudge('wrong', { context: { applicationId: 'app-1' } } as any),
-    ).rejects.toThrow(ForbiddenException);
-    expect(client.sendOutcomeNudge).not.toHaveBeenCalled();
-  });
-
   it('does not nudge twice about one application', async () => {
     const application = { id: 'app-1', state: 'downloaded', nudgedAt: new Date(), outcome: null };
     const { controller, client } = buildController({ application });
 
-    await controller.outcomeNudge('shhh', { context: { applicationId: 'app-1' } } as any);
+    await controller.outcomeNudge({ context: { applicationId: 'app-1' } } as any);
 
     expect(client.sendOutcomeNudge).not.toHaveBeenCalled();
   });
@@ -1477,7 +1468,7 @@ describe('POST /api/nudges/outcome', () => {
     const application = { id: 'app-1', state: 'marked_sent', nudgedAt: null, outcome: 'interview' };
     const { controller, client } = buildController({ application });
 
-    await controller.outcomeNudge('shhh', { context: { applicationId: 'app-1' } } as any);
+    await controller.outcomeNudge({ context: { applicationId: 'app-1' } } as any);
 
     expect(client.sendOutcomeNudge).not.toHaveBeenCalled();
   });
@@ -1485,7 +1476,7 @@ describe('POST /api/nudges/outcome', () => {
   it('raises when the callback carries no applicationId', async () => {
     const { controller } = buildController({ application: null });
 
-    await expect(controller.outcomeNudge('shhh', { context: {} } as any)).rejects.toThrow(
+    await expect(controller.outcomeNudge({ context: {} } as any)).rejects.toThrow(
       BadRequestException,
     );
   });
@@ -1494,7 +1485,7 @@ describe('POST /api/nudges/outcome', () => {
     const { controller } = buildController({ application: null });
 
     await expect(
-      controller.outcomeNudge('shhh', { context: { applicationId: 'gone' } } as any),
+      controller.outcomeNudge({ context: { applicationId: 'gone' } } as any),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -1506,7 +1497,7 @@ describe('POST /api/nudges/outcome', () => {
     const { controller, applications } = buildController({ application, send });
 
     await expect(
-      controller.outcomeNudge('shhh', { context: { applicationId: 'app-1' } } as any),
+      controller.outcomeNudge({ context: { applicationId: 'app-1' } } as any),
     ).rejects.toThrow(/notifications down/);
     expect(applications.update).not.toHaveBeenCalled();
   });
@@ -1541,7 +1532,6 @@ import { CvApplicationEntity } from '../applications/entities/cv-application.ent
 import { CvJobEntity } from '../jobs/entities/cv-job.entity';
 import { NotificationClientService } from './notification-client.service';
 
-export const NUDGE_CALLBACK_SECRET = 'CV_NUDGE_CALLBACK_SECRET';
 export const NUDGE_RECIPIENT = 'CV_NUDGE_RECIPIENT';
 
 /** The envelope BPCP's ActionDispatcherService posts: `{actionId, parameters, context}`. */
@@ -1554,7 +1544,8 @@ interface BpcpActionCallback {
 /**
  * The BPCP timeout callback (spec §5). NOT under `CvAuthGuard`: BPCP's action dispatcher posts
  * plain JSON with no user credential, so a user-token guard would reject every call. It is
- * protected by a shared secret header instead, and the service has no ingress before Phase 7.
+ * authenticated as a service call under SERVICE_IDENTITY_CONSUMER_STANDARD.md: the shared
+ * service-identity guard validates BPCP's Auth-issued credential and this route's service role.
  */
 @Controller('api/nudges')
 export class NudgeController {
@@ -1566,19 +1557,13 @@ export class NudgeController {
     @InjectRepository(CvJobEntity)
     private readonly jobs: Repository<CvJobEntity>,
     private readonly notifications: NotificationClientService,
-    @Inject(NUDGE_CALLBACK_SECRET) private readonly secret: string,
     @Inject(NUDGE_RECIPIENT) private readonly recipient: string,
   ) {}
 
   @Post('outcome')
   async outcomeNudge(
-    @Headers('x-cv-nudge-secret') suppliedSecret: string,
     @Body() body: BpcpActionCallback,
   ): Promise<{ nudged: boolean; reason?: string }> {
-    if (!this.secret || suppliedSecret !== this.secret) {
-      // Never echo the expected value; a mismatch is all the caller may learn.
-      throw new ForbiddenException('invalid nudge callback secret');
-    }
 
     const applicationId = body.context?.applicationId;
     if (typeof applicationId !== 'string' || applicationId.length === 0) {
@@ -1639,7 +1624,7 @@ import {
   NotificationClientService,
   NOTIFICATIONS_SERVICE_URL,
 } from './notification-client.service';
-import { NudgeController, NUDGE_CALLBACK_SECRET, NUDGE_RECIPIENT } from './nudge.controller';
+import { NudgeController, NUDGE_RECIPIENT } from './nudge.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([CvApplicationEntity, CvJobEntity])],
@@ -1647,7 +1632,6 @@ import { NudgeController, NUDGE_CALLBACK_SECRET, NUDGE_RECIPIENT } from './nudge
   providers: [
     NotificationClientService,
     { provide: NOTIFICATIONS_SERVICE_URL, useFactory: () => process.env.CV_NOTIFICATIONS_SERVICE_URL },
-    { provide: NUDGE_CALLBACK_SECRET, useFactory: () => process.env.CV_NUDGE_CALLBACK_SECRET ?? '' },
     { provide: NUDGE_RECIPIENT, useFactory: () => process.env.CV_NUDGE_RECIPIENT ?? '' },
   ],
   exports: [NotificationClientService],
@@ -1661,11 +1645,6 @@ Add `NotificationsModule` and `BpcpModule` to `src/app.module.ts` imports.
 
 Run: `npx jest src/notifications/`
 Expected: PASS, 11 cases.
-
-- [x] **Step 9: Confirm the secret check is load-bearing**
-
-Temporarily change the guard to `if (false)`, re-run, confirm "rejects a caller without the
-shared secret" fails. Revert.
 
 - [x] **Step 10: Commit**
 
@@ -1781,18 +1760,10 @@ Create `docs/workflows/cv-application-outcome.workflow.json`:
 ```
 
 Note: BPCP's `ActionDispatcherService` posts `{actionId, parameters, context}` and reads the
-`url` parameter — it sends no custom headers today. The shared-secret header the nudge controller
-requires therefore needs one of:
-
-**(a)** BPCP's dispatcher extended to forward a `headers` parameter, or
-**(b)** the secret carried as a query string on the `url`.
-
-Prefer **(a)**: it is a small, general improvement to BPCP and keeps the secret out of URLs and
-access logs. Implement it in the BPCP repo as its own commit before finishing this task, and
-adjust the `url` parameter here to add `"headers": {"x-cv-nudge-secret": "..."}` — sourced from a
-BPCP-side env reference, never a literal in this JSON. If BPCP's dispatcher cannot be changed in
-this phase, take **(b)** and record it as a trap in `STATE.json`, since a secret in a URL is
-weaker and must not survive into Phase 7.
+`url` parameter. It must send its own Auth-issued service credential on that call, exactly as
+[`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) requires. Extending the
+dispatcher to attach that credential belongs in the BPCP repo as its own commit; a credential in a
+query string, a custom shared-secret header, or an unauthenticated call are all prohibited.
 
 - [x] **Step 4: Run the tests**
 
@@ -2195,14 +2166,10 @@ runtime while the tests stay green:
 rtk kubectl get svc -A | rtk rg -E 'bpcp|notification'
 ```
 
-`CV_NUDGE_CALLBACK_SECRET` is a **secret, not a ConfigMap value**. Write it to Vault and let ESO
-carry it:
-
-```bash
-/vault-secret cv-tuning set CV_NUDGE_CALLBACK_SECRET=<generated>
-```
-
-Then add the key to `k8s/external-secret.yaml` alongside the existing entries.
+The callback credential is minted by Auth only, through
+`auth-microservice/scripts/provision-service-token.js`, and delivered on the Vault -> ExternalSecret
+-> Secret -> `secretKeyRef` path described in [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+Never generate one here. Add the resulting key to `k8s/external-secret.yaml` alongside the existing entries.
 
 - [x] **Step 3: Update STATE.json**
 
@@ -2210,7 +2177,7 @@ Set `phases.5.status` to `"done"` and `phases.6.status` to `"next"`. Update `tes
 `npm test` actually printed in step 1 — never to the estimate above. Add to `traps`:
 
 ```
-"The nudge callback POST /api/nudges/outcome is NOT under CvAuthGuard: BPCP's ActionDispatcherService posts plain JSON with no user credential, so a user-token guard would reject every call. It is protected by the x-cv-nudge-secret shared-secret header (CV_NUDGE_CALLBACK_SECRET, from Vault) and by the service having no ingress before Phase 7. Never 'fix' it by adding CvAuthGuard — that silently disables every nudge, and the failure appears only as instances stuck in BPCP.",
+"The nudge callback POST /api/nudges/outcome is NOT under CvAuthGuard: BPCP posts plain JSON with no user credential, so a user-token guard would reject every call. It is a service-to-service route protected only as auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md prescribes - an Auth-issued per-pair credential validated against a declared service role. Do not fix it with a user-token guard and do not substitute a shared secret header.",
 "The outcome nudge sends BEFORE stamping nudgedAt, deliberately. Stamping first would mark a nudge delivered that never left the building and the user would never be asked again; sending first means a crash between the two can at worst nudge twice. Duplicate nudges are recoverable, a silently-lost one is not.",
 "BpcpClientService returns null for a missing base url; NotificationClientService RAISES for one. Not an inconsistency: an unset BPCP url means 'this deployment has no workflow plane', a valid configuration, while an unset notifications url is only ever reached when a nudge is already due, so it means a promised notification is being dropped.",
 "The dashboard funnel is CUMULATIVE (each stage counts everything at or past it) and interviewRate is null, never 0, when nothing has been sent. A 0% rate over zero submissions reads to the user as 'your CV is failing' when the honest answer is 'no data yet'."
