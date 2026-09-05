@@ -156,7 +156,8 @@ loader/validator, the aggregation/report code, and this document. It does **not*
 1. Five real CVs, each with current, recorded consent for this exact processing.
 2. Each converted by hand into the fixture JSON format above and placed in a directory
    outside this repository (or in a path covered by `.gitignore` if kept locally).
-3. Network access to a running ai-microservice and its `CV_AI_JWT_SECRET`.
+3. Network access to a running ai-microservice and the Auth-issued `cv-tuning -> ai-microservice`
+   credential for `CV_AI_JWT_SECRET`.
 4. To compare `premium`, an ai-microservice/LiteLLM deployment that actually serves it plus
    `CV_BENCHMARK_PREMIUM_MODELS` set to that model id — without it, `premium` rows report
    `skipped`, and only `cheap`/`smart` are compared.

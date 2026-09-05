@@ -48,6 +48,10 @@ against live models and self-guards on `CI`):
 rtk npx ts-node src/applications/__evals__/run-eval.ts   # needs CV_AI_SERVICE_URL + CV_AI_JWT_SECRET
 ```
 
+`CV_AI_JWT_SECRET` carries the Auth-issued `cv-tuning -> ai-microservice` credential defined by
+[`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+Never sign one locally and never reuse another service's secret.
+
 Run it before and after any edit to `tailor.prompt.ts` or `entail.prompt.ts` and diff the
 tables — it is the only regression net for prompt changes. The current baseline is recorded in
 `docs/evals/2026-08-24-grounding-baseline.md`; it completed all 7 synthetic fixtures with zero
