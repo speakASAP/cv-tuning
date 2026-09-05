@@ -6,7 +6,9 @@ This file is the entry point for coding agents working in `cv-tuning`. Keep it c
 
 Read these files in order before changing code:
 
-1. `STATE.json` — current phase, validation counts, open items, and known traps.
+1. `TASKS.md` — the live work queue: active, ready-next, and blocked items. (`STATE.json` is the
+   ecosystem Wave projection only; it no longer carries phase status, validation counts, open
+   items, or traps — that block is archived at `docs/orchestrator/legacy-state-archive.md`.)
 2. `CLAUDE.md` — project architecture, invariants, anti-fabrication rules, and commands.
 3. `docs/specs/2026-08-22-cv-tailoring-platform-design.md` — authoritative product design.
 4. `BUSINESS.md`, `SYSTEM.md`, and `docs/01_vision/VISION.md` — approved intent and system boundaries.

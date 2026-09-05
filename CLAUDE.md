@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read first
 
-`STATE.json` is the live status file: current phase, test counts, open items, and a `traps`
-list of environment gotchas that have already cost time. Read it before planning anything and
-update it when a phase completes.
+`STATE.json` carries only the ecosystem Wave-projection contract (`schema_version`,
+`repository`, `service`, `planning`, `delivery`, `collection`) — it is **not** a phase or
+status narrative. It no longer holds phase status, test counts, open items, or a `traps` list;
+that block was archived verbatim to `docs/orchestrator/legacy-state-archive.md` on 2026-09-01
+(commit `ddb5ebe`). Read the archive for history only — it is frozen and is not updated.
+
+For live status, in order:
+- `TASKS.md` — the work queue (active / ready next / blocked). Its blocker and follow-up items
+  came from the archived STATE.json block, so this is where those now live.
+- `docs/superpowers/plans/` — one plan per phase, in execution order; each carries a
+  `status:` field in its front matter, which is the authoritative per-phase state.
+- `docs/evals/` — dated validation records: the grounding baseline and the Phase 8 benchmark
+  result. Phase status claims about model tiers should cite these, not a status file.
 
 Then, in order of depth:
 - `docs/specs/2026-08-22-cv-tailoring-platform-design.md` — the authoritative design. Code
@@ -57,9 +67,17 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 # handling: docs/evals/2026-08-28-phase-8-benchmark.md
 ```
 
-Cheap and smart benchmark evidence is recorded in `STATE.json`: both completed all five
-consented external fixtures on 2026-08-30, while premium is deferred until the funded production
-rollout. It uses its own `BenchmarkTier`/`BenchmarkAiClientService` (`benchmark-client.ts`), not
+Cheap and smart benchmark evidence is recorded in
+`docs/evals/2026-08-30-phase-8-benchmark-result.md`: both completed all five consented external
+fixtures on 2026-08-30 (cheap 21 supported / 1 overreach, smart 21 supported / 0 overreach, zero
+unsupported either tier), while premium is deferred until the funded production rollout. That run
+does **not** produce spec §8.2's €/application figure or the AI-tell tier comparison — both need
+the premium arm — so Phase 8 stays open and Phase 9 stays blocked. **Phase 8's premium arm,
+Phase 9, and Phase 10 are all gated on an explicit owner "go" that has not been given** (recorded
+2026-09-05; see `TASKS.md` "Owner gate"). The product is being validated by hand on free tiers
+against the owner's own data first — a good result there is the precondition for spending money.
+Do not run a premium arm, set `CV_BENCHMARK_PREMIUM_HUMAN_APPROVED`, or start billing work on the
+grounds that Phase 8 looks unfinished; it is unfinished on purpose. It uses its own `BenchmarkTier`/`BenchmarkAiClientService` (`benchmark-client.ts`), not
 production `AiTier`/`AiClientService`, specifically so premium never becomes reachable from
 production code during development.
 
@@ -212,8 +230,13 @@ would never dispatch the nudge, which is the entire point of the timer.
 **notifications/** — `NudgeController` (`POST /api/nudges/outcome`) is the BPCP action callback and
 is deliberately **not** under `CvAuthGuard`: BPCP's dispatcher posts plain JSON with no user
 credential, so a user-token guard would reject every call and the only symptom would be instances
-stuck in BPCP. It is protected by the `x-cv-nudge-secret` shared-secret header, and by the service
-having no ingress before Phase 7. The secret travels as `${env:CV_NUDGE_CALLBACK_SECRET}` in the
+stuck in BPCP. It is protected by the `x-cv-nudge-secret` shared-secret header. That header is now
+the **only** protection: the service has been publicly exposed since Phase 7 (`k8s/ingress.yaml`,
+`cv.alfares.cz`), so the earlier "no ingress" second layer is gone — a POST from the internet
+reaches this controller and is rejected with 403 by the secret check alone (verified 2026-09-05).
+Treat `CV_NUDGE_CALLBACK_SECRET` as an internet-facing credential: it must be strong, and rotating
+it means restarting BPCP so the workflow document's `${env:...}` resolves to the new value. The
+secret travels as `${env:CV_NUDGE_CALLBACK_SECRET}` in the
 workflow document, resolved by BPCP's dispatcher at send time, so it never lives in a document that
 is stored, listed over an API, and committed. The nudge is **sent before** `nudgedAt` is stamped:
 stamping first would mark delivered a nudge that never left the building and the user would never be
@@ -280,8 +303,14 @@ and is a contract — the render feeds a sha256 that spec §6.3 reuses as artifa
 
 ## Constraints that are not obvious from the code
 
-- **No third-party users before Phase 7 (GDPR).** Phases 1–6 run on the owner's own CV data
-  only, and there is deliberately no ingress manifest in `deploy.config.sh` until then.
+- **No third-party users before Phase 7 (GDPR)** — this gate is now **satisfied and lifted**.
+  Phases 1–6 ran on the owner's own CV data with no ingress. Phase 7 landed consent enforcement
+  (`ConsentGuard`), export, hard-delete and retention, and the service was published:
+  `k8s/ingress.yaml` serves `cv.alfares.cz` (TLS via cert-manager) and `deploy.config.sh` deploys
+  it plus a public post-verify curl. **The service is reachable from the internet today**
+  (verified 2026-09-05: `/health` 200, `/api/*` reachable and guarded). Access control is now
+  `CvAuthGuard` + `ConsentGuard` on the routes, not network isolation — assume any new route is
+  internet-facing the moment it merges.
 - **No silent failures**, enforced strictly here (see the global `CLAUDE.md`). "Not found" and
   "lookup failed" must stay distinguishable: `CvAuthGuard` returns 401 for a rejected token
   and 503 for an unreachable auth service; an empty AI completion raises rather than

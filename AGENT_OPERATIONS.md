@@ -34,7 +34,10 @@ Record known out-of-scope failures in `docs/orchestrator/VALIDATION_DEBT.md`. Va
 
 ## Handoff
 
-Update `TASKS.md` and `STATE.json` before ending an incomplete session. Record deferred deployment explicitly.
+Update `TASKS.md` before ending an incomplete session, and the `status:` front matter of the
+relevant `docs/superpowers/plans/` document when a phase completes. Record deferred deployment
+explicitly. `STATE.json` carries only the Wave projection — update it for projection fields
+(`planning`, `delivery`), not as a status narrative.
 
 ## Project-specific operations
 
