@@ -259,11 +259,6 @@ master snapshot and never follows `is_current`; `cv_render.facts_snapshot` store
 actually used. Editing the master CV can never retroactively change what the user already
 reviewed or downloaded.
 
-**ai/** — `AiClientService` obtains a service token via `mintServiceToken` (`src/ai/service-token.ts`) for calls to ai-microservice (the `iss` claim must be literally `ai-microservice`, regardless of caller). Every machine call is governed by [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md), which requires an Auth-issued per-pair RS256 JWT minted only via `provision-service-token.js` and records no exception; do not copy this lane as a model for a new service. It returns `modelUsed` and a `degraded`
-flag: a silent LiteLLM fallback is a quality collapse that still returns well-formed prose,
-so an unexpected model is logged at error level and marked degraded (spec §8.1). Only the
-development uses the existing free `cheap` and `smart` tiers; premium is deferred until the funded production rollout, where it will require explicit per-call approval.
-
 Migrations run via `migrationsRun: true` at boot — there is **no standalone data-source**, so
 any scratch-DB check needs a direct `DataSource` script.
 
