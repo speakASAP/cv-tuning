@@ -33,6 +33,82 @@ const PROOF_SECTION = 'Proof of Work';
 const EM_DASH = '—';
 
 /**
+ * Separator between the target job title and the candidate's name in the render's H1
+ * (`# App Developer - Jane Doe`).
+ *
+ * A plain hyphen, deliberately NOT the em dash: `cv-document.ts` gives `—` a load-bearing
+ * meaning inside `### ` entry headings (title/org separator), and reusing it here would put two
+ * different grammars on two heading levels of the same document.
+ */
+const H1_TITLE_SEPARATOR = ' - ';
+
+/**
+ * Splits a composed `# <Job Title> - <Name>` H1 back into its name.
+ *
+ * WHY THIS EXISTS: `confirmClaim` re-renders from a PRIOR RENDER's markdown, not from the
+ * master, so `buildRenderMarkdown`'s own output is fed back into `extractH1Name`. Without this,
+ * a confirm-claim round trip would read "App Developer - Jane Doe" as the name and re-compose
+ * it into "App Developer - App Developer - Jane Doe", growing by one title per decision.
+ *
+ * Splits on the LAST separator, so a job title that itself contains " - " still yields the
+ * name. `composeH1` additionally neutralises the separator inside the title, so that case
+ * should not arise from our own output — this stays last-match anyway rather than trusting an
+ * invariant a hand-edited render (manual edit is a supported path) could break.
+ */
+function nameFromComposedH1(heading: string): string {
+  const at = heading.lastIndexOf(H1_TITLE_SEPARATOR);
+  if (at === -1) return heading;
+  const name = heading.slice(at + H1_TITLE_SEPARATOR.length).trim();
+  // A trailing separator with nothing after it is not a name; keep the whole heading rather
+  // than returning an empty string that would render as a nameless CV.
+  return name.length > 0 ? name : heading;
+}
+
+/**
+ * Recovers the job-title half of a composed `# <Job Title> - <Name>` H1, or `null` when the
+ * heading carries a bare name.
+ *
+ * `confirmClaim` re-renders from a prior RENDER's markdown and deliberately does not re-read
+ * the job (see applications.service.ts) — the render it starts from already states the target
+ * role, so the title is recovered from there rather than re-fetched. That keeps a
+ * confirm-or-drop decision from silently stripping the headline off the CV.
+ */
+export function extractH1JobTitle(markdown: string): string | null {
+  const lines = markdown.split('\n').map((line) => line.trim());
+  const matches = lines
+    .map((line) => H1.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null);
+  if (matches.length !== 1) return null;
+
+  const heading = matches[0][1].trim();
+  const at = heading.lastIndexOf(H1_TITLE_SEPARATOR);
+  if (at === -1) return null;
+
+  const title = heading.slice(0, at).trim();
+  const name = heading.slice(at + H1_TITLE_SEPARATOR.length).trim();
+  // Mirrors nameFromComposedH1's guard: with nothing after the separator the heading is a bare
+  // name that happens to end in one, not a title/name pair.
+  return title.length > 0 && name.length > 0 ? title : null;
+}
+
+/**
+ * Builds the render's H1 from the target job title and the candidate's name.
+ *
+ * The job title is the APPLICATION's target role, not a claim about the candidate's history:
+ * it restates the posting the user is applying to, which is why composing it here needs no
+ * grounding pass. A missing or blank title degrades to the name alone rather than emitting a
+ * dangling separator — the job title is not always parseable from a posting, and a CV with no
+ * headline is correct where "# - Jane Doe" is broken.
+ *
+ * The separator is stripped from the title itself so `nameFromComposedH1` can always split the
+ * result back apart.
+ */
+function composeH1(jobTitle: string | null | undefined, name: string): string {
+  const title = (jobTitle ?? '').replace(/\s+/g, ' ').split(H1_TITLE_SEPARATOR).join(' ').trim();
+  return title.length > 0 ? `${title}${H1_TITLE_SEPARATOR}${name}` : name;
+}
+
+/**
  * Assembles `cv_render.markdown` to the ONLY canonical heading convention in the repo
  * (`src/export/cv-document.ts`'s module doc comment): H1 = candidate name, H2 = section,
  * H3 = entry, `- ` = bullet.
@@ -55,36 +131,65 @@ const EM_DASH = '—';
 export class MissingMasterNameError extends Error {
   constructor() {
     super(
-      'the master CV has no "# Your Name" heading, so a render cannot state who the CV ' +
-        'belongs to. Add a name heading (e.g. "# Jane Doe") to the top of the master CV, ' +
-        'save it, then regenerate this application.',
+      'the master CV does not start with a "# Your Name" heading, so a render cannot state ' +
+        'who the CV belongs to. The name heading must be the FIRST line of the master CV — a ' +
+        '"# ..." further down is treated as the title of whatever was pasted there, never as ' +
+        'your name. Add a name heading (e.g. "# Jane Doe") as the first line of the master ' +
+        'CV, save it, then regenerate this application.',
     );
     this.name = 'MissingMasterNameError';
   }
 }
 
 /**
- * Pulls the candidate's name from the first H1 line in `markdown`. Never fabricates a
- * placeholder (no "CV", no email-derived name) — raises `MissingMasterNameError` instead,
- * because a fabricated name on an exported CV is a worse failure than a loud, immediate one.
+ * Pulls the candidate's name from the master CV's LEADING H1 — the first non-empty line of
+ * `markdown`, blank lines aside. Never fabricates a placeholder (no "CV", no email-derived
+ * name) — raises `MissingMasterNameError` instead, because a fabricated name on an exported CV
+ * is a worse failure than a loud, immediate one.
+ *
+ * WHY THE POSITION IS PART OF THE RULE, and not just "the document's only H1". A master CV is
+ * frequently a paste-together: an imported job description, a project write-up, release notes.
+ * Any of those can carry its own `# Some Document Title` hundreds of lines down, and if the
+ * user's actual name sits on line 1 as PLAIN TEXT (the shape every gdocs/PDF/OCR import
+ * produces — none of them emit a `#`), then that buried title is the document's one and only
+ * H1. Matching on uniqueness alone therefore did not fail loudly; it silently promoted a
+ * project title to the candidate's name and shipped it as the H1 of an exported CV — a
+ * fabricated identity on the one line an employer reads first, which is precisely the failure
+ * `MissingMasterNameError` exists to prevent. Requiring the H1 to LEAD the document makes that
+ * unreachable: content pasted below the header can no longer name the person.
+ *
+ * The uniqueness check is kept on top of the position check. A second H1 means the document
+ * does not follow the H1-name convention at all (e.g. `linkedin.importer.ts#toMarkdown`'s
+ * `# Experience` / `# Skills`), and `cv-document.ts` independently raises on a second H1 as
+ * ambiguous — so accepting the leading one would hand the export path a document it will then
+ * reject anyway.
+ *
+ * A master whose name is plain text still raises, and that is deliberate: the fix is one edit
+ * the user can make ("# Jane Doe"), whereas guessing which line is a person's name from an
+ * arbitrary import is exactly the inference this product refuses to make.
  */
 export function extractH1Name(markdown: string): string {
-  const matches = markdown
-    .split('\n')
-    .map((line) => H1.exec(line.trim()))
+  const lines = markdown.split('\n').map((line) => line.trim());
+  const matches = lines
+    .map((line) => H1.exec(line))
     .filter((m): m is RegExpExecArray => m !== null);
 
-  // Exactly one H1 is the convention's own definition of "this document states a name"
-  // (`cv-document.ts` raises on a second H1 as ambiguous). Zero means no name was ever
-  // given; two or more (e.g. `linkedin.importer.ts#toMarkdown`'s `# Experience` / `# Skills`
-  // section headings) means the document does not conform to the H1-name convention at all,
-  // so there is no single H1 to trust as a name either — both are the same "absent" case,
-  // never a pick-one guess.
+  // Two or more H1s: the document does not conform to the convention, so there is no single
+  // H1 to trust as a name. Same "absent" case as zero — never a pick-one guess.
   if (matches.length !== 1) {
     throw new MissingMasterNameError();
   }
 
-  return matches[0][1].trim();
+  // The H1 must LEAD the document. Only blank lines may precede it; a `# ` that follows any
+  // other content is that content's title, not the person's name.
+  const firstContent = lines.find((line) => line.length > 0);
+  if (firstContent === undefined || H1.exec(firstContent) === null) {
+    throw new MissingMasterNameError();
+  }
+
+  // A prior render's H1 is already `<Job Title> - <Name>` (confirmClaim feeds our own output
+  // back in), so the name is recovered rather than taken whole — see nameFromComposedH1.
+  return nameFromComposedH1(matches[0][1].trim());
 }
 
 /**
@@ -116,6 +221,13 @@ interface RenderSection {
  * `facts` is required, not defaulted: an omitted snapshot would quietly file every bullet
  * under `GENERAL_SECTION` and produce a structurally poorer CV with no error anywhere.
  *
+ * `jobTitle` is the APPLICATION's target role and becomes the first half of the H1
+ * (`# App Developer - Jane Doe`). It is optional because a posting does not always yield a
+ * parseable title, and a headline-less CV is correct where a dangling separator is broken.
+ * It restates the posting the user chose to apply to — not a claim about their history — so
+ * it needs no grounding pass, exactly like the code-built salutation in
+ * `cover-letter-render.ts`.
+ *
  * ORDERING IS DETERMINISTIC BY CONTRACT. Sections, entries within a section, and bullets
  * within an entry are all ordered by first appearance in `bullets`, with `GENERAL_SECTION`
  * forced last. `facts` is used only as a lookup, so its own order cannot influence the output.
@@ -127,6 +239,7 @@ export function buildRenderMarkdown(
   sourceMarkdown: string,
   bullets: Pick<TailoredBullet, 'text' | 'sourceFactId'>[],
   facts: Pick<FactSnapshot, 'factId' | 'text' | 'kind' | 'section' | 'title' | 'org' | 'period'>[],
+  jobTitle?: string | null,
 ): string {
   const name = extractH1Name(sourceMarkdown);
   const contact = extractContactLines(sourceMarkdown);
@@ -180,7 +293,10 @@ export function buildRenderMarkdown(
     ...sections.filter((s) => s.heading === GENERAL_SECTION),
   ];
 
-  const parts = [`# ${name}`];
+  // `<Job Title> - <Name>`, or the name alone when no title is available. `extractH1Name`
+  // above already reduced a composed heading back to the bare name, so re-rendering a prior
+  // render (confirmClaim) recomposes rather than nesting — see nameFromComposedH1.
+  const parts = [`# ${composeH1(jobTitle, name)}`];
   // Re-emitted in `cv-document.ts`'s position for contact detail: after the H1, before the
   // first `## `. Joined with ` | ` because that is the separator the parser splits on, which
   // is what makes this round-trip stable (see `extractContactLines`).

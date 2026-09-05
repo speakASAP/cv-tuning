@@ -35,7 +35,7 @@ import { CvChatEntity } from './entities/cv-chat.entity';
 import { CvRenderEntity } from './entities/cv-render.entity';
 import { EntailService } from './entail.service';
 import { assertCanMarkSent, assertCanRecordOutcome } from './outcome';
-import { buildRenderMarkdown } from './render-markdown';
+import { buildRenderMarkdown, extractH1JobTitle } from './render-markdown';
 import { ReviseService } from './revise.service';
 import { TailorService } from './tailor.service';
 
@@ -193,7 +193,14 @@ export class ApplicationsService {
       // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export can parse
       // it. `snapshot` is passed so the builder can group bullets under the section, employer,
       // and period their source facts were derived from — see render-markdown.ts.
-      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets, snapshot);
+      // `job.title` becomes the H1 headline (`# App Developer - Jane Doe`): it restates the
+      // posting being applied to, not a claim about the candidate, so it needs no grounding.
+      const markdown = buildRenderMarkdown(
+        pinned.master.markdown,
+        validated.bullets,
+        snapshot,
+        job.title,
+      );
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -425,8 +432,13 @@ export class ApplicationsService {
 
       const validated = await this.entail.validate(drafted.bullets, snapshot);
 
-      // Same structured convention as generate() — see render-markdown.ts.
-      const markdown = buildRenderMarkdown(pinned.master.markdown, validated.bullets, snapshot);
+      // Same structured convention as generate() — see render-markdown.ts, H1 headline included.
+      const markdown = buildRenderMarkdown(
+        pinned.master.markdown,
+        validated.bullets,
+        snapshot,
+        job.title,
+      );
       const provenance: RenderProvenance = {
         bullets: validated.bullets,
         droppedBullets: drafted.droppedBullets,
@@ -590,12 +602,20 @@ export class ApplicationsService {
       },
     ];
 
-    // `source.markdown` already carries the H1 name — it was built by buildRenderMarkdown
-    // in generate()/revise() — so it is reused directly rather than re-fetching the master.
+    // `source.markdown` already carries the composed `<Job Title> - <Name>` H1 — it was built
+    // by buildRenderMarkdown in generate()/revise() — so both halves are reused directly rather
+    // than re-fetching the master or the job. The title is recovered explicitly because
+    // `extractH1Name` reduces the heading back to the bare name; without it, a confirm-or-drop
+    // decision would silently strip the headline off the CV.
     // The section/entry structure is rebuilt from `source.factsSnapshot` (the SAME snapshot the
     // new render stores below), not carried over from the prior markdown, so re-rendering is
     // idempotent instead of accumulating a copy of the previous layout.
-    const markdown = buildRenderMarkdown(source.markdown, bullets, source.factsSnapshot);
+    const markdown = buildRenderMarkdown(
+      source.markdown,
+      bullets,
+      source.factsSnapshot,
+      extractH1JobTitle(source.markdown),
+    );
     const revision = revisionNo + 1;
 
     const draft: CvRenderEntity = {
