@@ -19,6 +19,15 @@ Read these files in order before changing code:
 
 The project owner approves the business and product scope. Agents must not redefine business intent, add unapproved integrations, or introduce unsupported claims.
 
+## Service-to-service authentication
+Any call this service makes to, or receives from, another service is governed by
+[`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+Read it before writing or debugging a machine call — including a 401 from an internal
+endpoint. New machine paths use an Auth-issued per-pair RS256 service JWT; a shared static
+token is legacy and closed to new adopters. This repository has a **documented legacy
+exception** recorded in that standard — do not treat the existing pattern as the model for
+new work.
+
 ## Intent Preservation System
 
 Preserve the chain of intent across:

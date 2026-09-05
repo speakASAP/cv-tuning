@@ -259,7 +259,7 @@ master snapshot and never follows `is_current`; `cv_render.facts_snapshot` store
 actually used. Editing the master CV can never retroactively change what the user already
 reviewed or downloaded.
 
-**ai/** — `AiClientService` mints its own HS256 service token (the `iss` claim must be
+**ai/** — `AiClientService` obtains a service token via `mintServiceToken` (`src/ai/service-token.ts`), which **prefers RS256** whenever a private key is configured; the HS256 branch is a migration-window fallback (the `iss` claim must be literally `ai-microservice`, regardless of caller). This whole lane is a documented exception to [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md), which requires auth-issued per-pair tokens — do not copy it for a new service.
 literally `ai-microservice`, regardless of caller). It returns `modelUsed` and a `degraded`
 flag: a silent LiteLLM fallback is a quality collapse that still returns well-formed prose,
 so an unexpected model is logged at error level and marked degraded (spec §8.1). Only the
