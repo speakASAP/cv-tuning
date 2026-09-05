@@ -74,7 +74,7 @@ kubectl get pods -n statex-apps | rtk rg ai-microservice
 - [x] **Step 2: Run the existing harness**
 
 ```bash
-CV_AI_SERVICE_URL=<reachable-url> CV_AI_JWT_SECRET=<ai-microservice JWT_SECRET> \
+CV_AI_SERVICE_URL=<reachable-url> CV_AI_JWT_SECRET=<cv-tuning's own Auth-issued service credential per SERVICE_IDENTITY_CONSUMER_STANDARD.md — never a value copied from ai-microservice's own secret> \
   rtk npx ts-node src/applications/__evals__/run-eval.ts
 ```
 

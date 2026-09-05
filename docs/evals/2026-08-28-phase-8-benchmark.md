@@ -35,8 +35,7 @@ premium rows as skipped rather than attempting paid calls.
 
 ```bash
 CV_AI_SERVICE_URL=http://<ai-microservice clusterIP>:3380 \
-CV_AI_JWT_SECRET=<matches ai-microservice's JWT_SECRET> \
-CV_AI_JWT_PRIVATE_KEY=<PEM private key for RS256, optional when JWT_SECRET is available> \
+CV_AI_JWT_SECRET=<cv-tuning's own Auth-issued service credential> \
 CV_BENCHMARK_FIXTURES_DIR=/absolute/path/outside/this/repo/five-consented-cvs \
 CV_BENCHMARK_PREMIUM_MODELS=openrouter/anthropic/claude-sonnet-4.6 \
 CV_BENCHMARK_PREMIUM_HUMAN_APPROVED=true \
@@ -44,11 +43,14 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 ```
 
 - `CV_AI_SERVICE_URL` / `CV_AI_JWT_SECRET` — same contract as `run-eval.ts`: a reachable
-  ai-microservice and its legacy HS256 secret. [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md)
-  requires an Auth-issued per-pair RS256 JWT and records no HS256 exception, so supply
-  `CV_AI_JWT_PRIVATE_KEY` below rather than relying on this fallback.
-- `CV_AI_JWT_PRIVATE_KEY` — RS256 signing key. When present, the benchmark client signs RS256
-  tokens, which ai-microservice verifies against `JWT_PUBLIC_KEY` first.
+  ai-microservice and the cv-tuning → ai-microservice service credential. The sole
+  normative source for that credential is
+  [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md):
+  an Auth-issued, per-pair RS256 JWT delivered through Vault. Never copy ai-microservice's
+  own secret into this variable and never have this harness mint or sign its own token —
+  either practice is the shared-credential/self-signed-JWT pattern the standard prohibits.
+  If the harness cannot obtain a properly provisioned token today, that is an integration
+  gap to repair, not a documented exception.
 - `CV_BENCHMARK_FIXTURES_DIR` — **required.** A directory containing exactly five fixture
   `*.json` files (format below). The loader (`benchmark-fixtures.ts`) refuses any other
   count — a partial run is not the measurement spec §8.2 asks for.
