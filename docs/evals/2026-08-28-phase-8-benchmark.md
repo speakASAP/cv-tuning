@@ -45,7 +45,7 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 - `CV_AI_SERVICE_URL` / `CV_AI_JWT_SECRET` — same contract as `run-eval.ts`: a reachable
   ai-microservice and the cv-tuning → ai-microservice service credential. The sole
   normative source for that credential is
-  [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md):
+  [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md):
   an Auth-issued, per-pair RS256 JWT delivered through Vault. Never copy ai-microservice's
   own secret into this variable and never have this harness mint or sign its own token —
   either practice is the shared-credential/self-signed-JWT pattern the standard prohibits.
