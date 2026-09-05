@@ -44,10 +44,11 @@ rtk npx ts-node src/applications/__evals__/benchmark-run.ts
 ```
 
 - `CV_AI_SERVICE_URL` / `CV_AI_JWT_SECRET` — same contract as `run-eval.ts`: a reachable
-  ai-microservice and the secret it verifies HS256 service tokens against.
-- `CV_AI_JWT_PRIVATE_KEY` — optional RS256 signing key. When present, the benchmark client
-  signs RS256 tokens and matches the live ai-microservice contract, which verifies JWT_PUBLIC_KEY
-  first and only falls back to HS256 while the migration window is open.
+  ai-microservice and its legacy HS256 secret. [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md)
+  requires an Auth-issued per-pair RS256 JWT and records no HS256 exception, so supply
+  `CV_AI_JWT_PRIVATE_KEY` below rather than relying on this fallback.
+- `CV_AI_JWT_PRIVATE_KEY` — RS256 signing key. When present, the benchmark client signs RS256
+  tokens, which ai-microservice verifies against `JWT_PUBLIC_KEY` first.
 - `CV_BENCHMARK_FIXTURES_DIR` — **required.** A directory containing exactly five fixture
   `*.json` files (format below). The loader (`benchmark-fixtures.ts`) refuses any other
   count — a partial run is not the measurement spec §8.2 asks for.
