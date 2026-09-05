@@ -2,7 +2,7 @@
   "service": {
     "name": "cv-tuning",
     "kind": "service",
-    "lifecycle": "planning-validated",
+    "lifecycle": "planning",
     "deployment": "kubernetes"
   },
   "schema_version": "1.0",
