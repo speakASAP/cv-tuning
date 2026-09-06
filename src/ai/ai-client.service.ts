@@ -17,7 +17,14 @@ export interface AiCompletionRequest {
   outputSchema?: Record<string, unknown>;
   maxTokens?: number;
   correlationId?: string;
+  /** Budget for THIS service's HTTP call to ai-microservice. */
   timeoutMs?: number;
+  /**
+   * Budget ai-microservice should apply to its own upstream LiteLLM call. Always strictly
+   * below `timeoutMs`, so the upstream deadline fires first and returns a structured
+   * AI_HTTP_TIMEOUT rather than this client aborting and losing the error code.
+   */
+  upstreamTimeoutMs?: number;
 }
 
 export interface AiCompletion {
@@ -41,11 +48,44 @@ const EXPECTED_MODELS: Record<AiTier, readonly string[]> = {
 const SERVICE_ID = 'cv-tuning';
 
 /**
- * Above the LiteLLM proxy's own request_timeout (120s). A caller timeout shorter than the
- * proxy's means the fallback chain never runs and the aborted attempts leave no trace in
- * the proxy log — the incident documented in litellm_config.yaml router_settings.
+ * The binding constraint is NOT the LiteLLM proxy — it is Cloudflare. cv.alfares.cz is
+ * proxied (`server: cloudflare`), and the free plan cuts an origin request off at ~100s with
+ * its own 504 HTML page. Nothing this service sets can extend that, so a budget above it buys
+ * only a response no browser is still waiting for: the user saw a Cloudflare error page while
+ * this service was still working (2026-09-06).
+ *
+ * 95s therefore sits just under the edge limit, so OUR deadline fires first and the caller
+ * gets a structured error instead of Cloudflare's HTML. The whole chain nests inside it:
+ * 85s upstream (below) < 95s here < ~100s edge.
+ *
+ * The prior 150s predated the ingress being public and was chosen only to sit above the
+ * proxy's request_timeout; the fallback-chain concern it documented is now enforced by
+ * DEFAULT_UPSTREAM_TIMEOUT_MS nesting below this value, not by the value being large.
  */
-const DEFAULT_TIMEOUT_MS = 150_000;
+const DEFAULT_TIMEOUT_MS = 95_000;
+
+/**
+ * Budget ai-microservice is asked to apply to its own upstream LiteLLM call.
+ *
+ * Its deployed global is 75s, which a grounding eval measured this service's prompts running
+ * right up against: median 40.3s, max 70.3s, against a 58+10+5=73s LiteLLM chain — about 3s
+ * of headroom, so a slow call tips over and the user sees a dead revise. That global is
+ * pinned from above and cannot be raised for everyone (education-service allows 180s and
+ * retries once, so 2x the global is its ceiling), so this service asks for its own budget
+ * instead of moving a shared one.
+ *
+ * Every call on this client's path is a long CV prompt, so it applies to all of them rather
+ * than to a list of callers a sixth caller would be forgotten from. It stays strictly below
+ * DEFAULT_TIMEOUT_MS so the upstream deadline fires FIRST and comes back as a structured
+ * AI_HTTP_TIMEOUT; if this client aborted first, the error code would be lost and the caller
+ * could not tell a timeout from an unreachable service.
+ *
+ * 85s clears the 70.3s worst case measured for these prompts, and is bounded above by
+ * Cloudflare's ~100s edge limit rather than by anything in this stack — see
+ * DEFAULT_TIMEOUT_MS. It also requires LiteLLM's own smart chain (58+10+5=73s) to stay
+ * below it, which it does.
+ */
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 85_000;
 
 @Injectable()
 export class AiClientService {
@@ -87,6 +127,12 @@ export class AiClientService {
           output_schema: input.outputSchema,
           max_tokens: input.maxTokens ?? 8000,
           correlation_id: input.correlationId,
+          // The budget ai-microservice should apply to its own upstream LiteLLM call. Without
+          // it that call aborts at the global LITELLM_TIMEOUT_MS (75s in the deployed
+          // configmap), which is below what this service's CV prompts measurably need, so a
+          // revise died upstream long before the timeout above was reached. Always sent:
+          // every call on this path is a long CV prompt (see DEFAULT_UPSTREAM_TIMEOUT_MS).
+          timeout_ms: input.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
         }),
       });
     } catch (cause) {
