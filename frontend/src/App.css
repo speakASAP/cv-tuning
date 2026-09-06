@@ -101,6 +101,22 @@
   font-size: 0.8rem;
 }
 
+/* Generic button:hover uses navy (#243f7a) for white-on-blue actions. Application rows
+   override the default colors but not hover, so unselected text stayed dark on navy. */
+.application:hover {
+  background: #e6edfc;
+  color: #1d469a;
+}
+
+.application.selected:hover {
+  background: #243f7a;
+  color: #fff;
+}
+
+.application-list .application:not(.selected):hover span {
+  color: #52627d;
+}
+
 /* The action a person clicks lives at the bottom of a long review panel, but a fetch/action
    error was rendered inline at the very top of the page \u2014 invisible without scrolling up.
    Fixed and centered, matching .progress-banner, so it is seen wherever the click happened. */
