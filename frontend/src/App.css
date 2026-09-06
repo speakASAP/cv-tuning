@@ -92,8 +92,8 @@
   font-size: 0.85rem;
 }
 
-/* The state now reads as words next to the position, so it must not shout like an id. */
-.application-list .application span {
+/* Mute metadata on unselected rows only — selected inherits white from .application.selected. */
+.application-list .application:not(.selected) span {
   color: #64748b;
   font-size: 0.8rem;
 }
