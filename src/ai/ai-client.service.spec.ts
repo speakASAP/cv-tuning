@@ -28,6 +28,49 @@ describe('AiClientService', () => {
     expect(result.degraded).toBe(false);
   });
 
+  /**
+   * The 2026-09-06 revise failure: the upstream LiteLLM call ran under ai-microservice's
+   * 75s global, below what these CV prompts measurably need (median 40.3s / max 70.3s
+   * against a 73s chain), so it aborted and the user got a Cloudflare 504 page. The fix is
+   * this field, so a silent drop here restores the original bug with nothing to catch it.
+   */
+  it('asks ai-microservice for an upstream budget above its 75s global', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hi', model_used: SMART_MODEL }) });
+
+    await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.timeout_ms).toBeGreaterThan(75_000);
+  });
+
+  it('lets a caller override the upstream budget', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hi', model_used: SMART_MODEL }) });
+
+    await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x', upstreamTimeoutMs: 40_000 });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.timeout_ms).toBe(40_000);
+  });
+
+  /**
+   * Budgets must nest or the inner deadline is decorative. If this client aborted first the
+   * structured AI_HTTP_TIMEOUT would be lost and a timeout would look like an unreachable
+   * service; and the whole chain must still finish inside Cloudflare's ~100s edge cut-off,
+   * or the user gets its 504 HTML page no matter what this service decides.
+   */
+  it('keeps the upstream budget below its own, and both below the Cloudflare edge limit', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hi', model_used: SMART_MODEL }) });
+    const logged: string[] = [];
+    jest.spyOn(client['logger'], 'log').mockImplementation((message: unknown) => { logged.push(String(message)); });
+
+    await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const ownTimeoutMs = Number(/timeout_ms=(\d+)/.exec(logged.join('\n'))?.[1]);
+    expect(ownTimeoutMs).toBeGreaterThan(body.timeout_ms);
+    expect(ownTimeoutMs).toBeLessThan(100_000);
+  });
+
   it('accepts the cheap tier being served by its own model', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'hi', model_used: CHEAP_MODEL }) });
 
