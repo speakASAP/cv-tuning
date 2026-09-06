@@ -179,6 +179,11 @@ export class ApplicationsService {
     }
 
     try {
+      const tailorStarted = Date.now();
+      this.logger.log(
+        `${new Date().toISOString()} generate tailor start application=${application.id} ` +
+          `revision=${revisionNo} facts=${snapshot.length}`,
+      );
       const drafted = await this.tailor.tailor({
         facts: snapshot,
         requirements: job.parsed.requirements,
@@ -187,14 +192,23 @@ export class ApplicationsService {
         language: application.renderLanguage,
         styleExemplars: snapshot.slice(0, STYLE_EXEMPLAR_COUNT).map((f) => f.text),
       });
+      this.logger.log(
+        `${new Date().toISOString()} generate tailor done application=${application.id} ` +
+          `duration_ms=${Date.now() - tailorStarted} bullets=${drafted.bullets.length} ` +
+          `dropped=${drafted.droppedBullets.length}`,
+      );
 
+      const entailStarted = Date.now();
       const validated = await this.entail.validate(drafted.bullets, snapshot);
+      this.logger.log(
+        `${new Date().toISOString()} generate entail done application=${application.id} ` +
+          `duration_ms=${Date.now() - entailStarted}`,
+      );
 
       // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export can parse
       // it. `snapshot` is passed so the builder can group bullets under the section, employer,
       // and period their source facts were derived from — see render-markdown.ts.
-      // `job.title` becomes the H1 headline (`# App Developer - Jane Doe`): it restates the
-      // posting being applied to, not a claim about the candidate, so it needs no grounding.
+      // H1 is the candidate's name; `job.title` is the subtitle under it, not a claim.
       const markdown = buildRenderMarkdown(
         pinned.master.markdown,
         validated.bullets,
@@ -238,13 +252,21 @@ export class ApplicationsService {
       return this.toView(render);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      // generation_failed exists so a mid-generation failure surfaces with its error rather
-      // than leaving the application stuck in `generating` forever (spec §5).
+      // A failed first generate has nothing to review. A failed regenerate must not hide the
+      // last good CV behind generation_failed — that state blocks approve/revise even though
+      // a render exists (observed 2026-09-06 after AI_HTTP_TIMEOUT).
+      const prior = await this.renders.find({
+        where: { applicationId: application.id },
+        order: { revisionNo: 'DESC' },
+      });
       await this.applications.update(application.id, {
-        state: 'generation_failed' as ApplicationState,
+        state: (prior.length > 0 ? 'in_review' : 'generation_failed') as ApplicationState,
         stateError: message,
       });
-      this.logger.error(`generation failed for application ${application.id} revision ${revisionNo}: ${message}`);
+      this.logger.error(
+        `${new Date().toISOString()} generation failed for application ${application.id} ` +
+          `revision ${revisionNo}: ${message}`,
+      );
       throw cause;
     }
   }
@@ -364,11 +386,7 @@ export class ApplicationsService {
       throw new ConflictException(`application ${applicationId}: revision already in progress`);
     }
 
-    if (application.state !== 'in_review' && application.state !== 'approved') {
-      throw new ConflictException(
-        `application ${applicationId} is in state ${application.state} and cannot be revised`,
-      );
-    }
+    await this.assertReviewable(application, 'revised');
 
     if (application.revisionCount >= MAX_REVISIONS) {
       throw new ConflictException(
@@ -418,6 +436,11 @@ export class ApplicationsService {
     const revisionNo = latest.revisionNo + 1;
 
     try {
+      const reviseStarted = Date.now();
+      this.logger.log(
+        `${new Date().toISOString()} revise start application=${applicationId} ` +
+          `instruction_bytes=${Buffer.byteLength(instruction, 'utf8')} history_turns=${history.length}`,
+      );
       const drafted = await this.reviseService.revise({
         facts: snapshot,
         requirements: job.parsed.requirements,
@@ -429,8 +452,17 @@ export class ApplicationsService {
         history: history.map((turn) => ({ role: turn.role, content: turn.content })),
         instruction,
       });
+      this.logger.log(
+        `${new Date().toISOString()} revise model done application=${applicationId} ` +
+          `duration_ms=${Date.now() - reviseStarted} bullets=${drafted.bullets.length}`,
+      );
 
+      const entailStarted = Date.now();
       const validated = await this.entail.validate(drafted.bullets, snapshot);
+      this.logger.log(
+        `${new Date().toISOString()} revise entail done application=${applicationId} ` +
+          `duration_ms=${Date.now() - entailStarted}`,
+      );
 
       // Same structured convention as generate() — see render-markdown.ts, H1 headline included.
       const markdown = buildRenderMarkdown(
@@ -488,13 +520,15 @@ export class ApplicationsService {
       return this.toView(render);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      // Never leave the application stuck in `revising` — that state would reject every
-      // later turn as "already in progress" with no way out.
+      // Never leave the application stuck in `revising`, and never bury a still-reviewable
+      // CV under generation_failed — that state blocked approve after a timeout (2026-09-06).
       await this.applications.update(applicationId, {
-        state: 'generation_failed' as ApplicationState,
+        state: 'in_review',
         stateError: message,
       });
-      this.logger.error(`revision failed for application ${applicationId}: ${message}`);
+      this.logger.error(
+        `${new Date().toISOString()} revision failed for application ${applicationId}: ${message}`,
+      );
       throw cause;
     }
   }
@@ -526,12 +560,7 @@ export class ApplicationsService {
 
     // An approved application may deliberately return to review for a new decision, but no
     // terminal or in-progress state may mint a render through this path.
-    if (application.state !== 'in_review' && application.state !== 'approved') {
-      throw new ConflictException(
-        `application ${applicationId} is in state ${application.state}; claims can only be ` +
-          'confirmed or dropped while the application is in_review',
-      );
-    }
+    await this.assertReviewable(application, 'decided');
 
     const source = await this.renders.findOne({ where: { applicationId, revisionNo } });
     if (!source) {
@@ -602,11 +631,10 @@ export class ApplicationsService {
       },
     ];
 
-    // `source.markdown` already carries the composed `<Job Title> - <Name>` H1 — it was built
-    // by buildRenderMarkdown in generate()/revise() — so both halves are reused directly rather
-    // than re-fetching the master or the job. The title is recovered explicitly because
-    // `extractH1Name` reduces the heading back to the bare name; without it, a confirm-or-drop
-    // decision would silently strip the headline off the CV.
+    // `source.markdown` already carries the name H1 and role subtitle — both halves are
+    // reused directly rather than re-fetching the master or the job. The title is recovered
+    // explicitly because `extractH1Name` returns the bare name; without it, a confirm-or-drop
+    // decision would silently strip the position line off the CV.
     // The section/entry structure is rebuilt from `source.factsSnapshot` (the SAME snapshot the
     // new render stores below), not carried over from the prior markdown, so re-rendering is
     // idempotent instead of accumulating a copy of the previous layout.
@@ -652,11 +680,7 @@ export class ApplicationsService {
    */
   async edit(userId: string, applicationId: string, markdown: string): Promise<RenderView> {
     const application = await this.findOwned(userId, applicationId);
-    if (application.state !== 'in_review' && application.state !== 'approved') {
-      throw new ConflictException(
-        `application ${applicationId} is in state ${application.state}; it can only be edited while in_review or approved`,
-      );
-    }
+    await this.assertReviewable(application, 'edited');
     const renders = await this.renders.find({ where: { applicationId }, order: { revisionNo: 'DESC' } });
     const latest = renders[0];
     if (!latest) throw new ConflictException(`application ${applicationId} has no render to edit`);
@@ -682,11 +706,13 @@ export class ApplicationsService {
   async approve(userId: string, applicationId: string): Promise<CvApplicationEntity> {
     const application = await this.findOwned(userId, applicationId);
 
-    if (application.state !== 'in_review') {
+    await this.assertReviewable(application, 'approved');
+    if (application.state !== 'in_review' && application.state !== 'generation_failed') {
       // A transition into `approved`, not an idempotent setter (spec §5.2). Once Task 8 wires
       // export-on-approve, re-approving a `downloaded` application would silently regenerate
       // and replace an artifact the user already downloaded — exactly the guarantee spec §6.3
-      // exists to prevent. Matches revise()'s state guard above.
+      // exists to prevent. generation_failed is allowed only when a prior render exists
+      // (assertReviewable), so a timeout cannot block approval of the last good CV.
       throw new ConflictException(
         `application ${applicationId} is in state ${application.state} and cannot be approved`,
       );
@@ -1109,6 +1135,25 @@ export class ApplicationsService {
         .filter((b) => !decided.has(bulletIdOf(b)))
         .map((b) => ({ ...b, bulletId: bulletIdOf(b) })),
     };
+  }
+
+  /**
+   * Review actions need a CV to look at. `in_review` and `approved` always qualify.
+   * `generation_failed` qualifies only when a prior render exists — a timeout must not
+   * lock the user out of the last good CV.
+   */
+  private async assertReviewable(application: CvApplicationEntity, action: string): Promise<void> {
+    if (application.state === 'in_review' || application.state === 'approved') return;
+    if (application.state === 'generation_failed') {
+      const prior = await this.renders.find({
+        where: { applicationId: application.id },
+        order: { revisionNo: 'DESC' },
+      });
+      if (prior.length > 0) return;
+    }
+    throw new ConflictException(
+      `application ${application.id} is in state ${application.state} and cannot be ${action}`,
+    );
   }
 
   private async findOwned(userId: string, applicationId: string): Promise<CvApplicationEntity> {

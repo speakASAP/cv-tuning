@@ -25,12 +25,27 @@ describe('buildRevisePrompt', () => {
     expect(buildRevisePrompt(base)).toContain('[f1]');
   });
 
-  it('renders prior turns so the model does not undo an earlier request', () => {
+  it('renders prior user turns so the model does not undo an earlier request', () => {
     const prompt = buildRevisePrompt({
       ...base,
       history: [{ role: 'user' as const, content: 'drop the education section' }],
     });
     expect(prompt).toContain('drop the education section');
+  });
+
+  it('omits assistant turns, which are full CV copies already present as previousMarkdown', () => {
+    const prompt = buildRevisePrompt({
+      ...base,
+      previousMarkdown: '# Jane Doe\n\n- kept',
+      history: [
+        { role: 'user' as const, content: 'make it shorter' },
+        { role: 'assistant' as const, content: '# Jane Doe\n\n- a whole previous CV that must not be resent' },
+        { role: 'user' as const, content: 'now punchier' },
+      ],
+    });
+    expect(prompt).toContain('now punchier');
+    expect(prompt).toContain('make it shorter');
+    expect(prompt).not.toContain('a whole previous CV that must not be resent');
   });
 
   it('refuses instructions that ask for new claims', () => {

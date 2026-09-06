@@ -2,7 +2,7 @@ import { AI_TELL_PHRASES } from './ai-tell';
 import { ChatRole } from './application.types';
 
 /** Bumped on every prompt change and persisted per render, so an eval can attribute a regression. */
-export const REVISE_PROMPT_VERSION = 'revise-v1';
+export const REVISE_PROMPT_VERSION = 'revise-v2';
 
 export const REVISE_SYSTEM_PROMPT = [
   'You revise a candidate\'s tailored CV in response to their instruction.',
@@ -48,8 +48,9 @@ export function buildRevisePrompt(input: RevisePromptInput): string {
   const exemplars = input.styleExemplars.length
     ? input.styleExemplars.map((s) => `- ${s}`).join('\n')
     : '(none available; keep the phrasing of the source bullets)';
-  const history = input.history.length
-    ? input.history.map((t) => `${t.role}: ${t.content}`).join('\n')
+  const userTurns = input.history.filter((t) => t.role === 'user').slice(-6);
+  const history = userTurns.length
+    ? userTurns.map((t) => `${t.role}: ${t.content}`).join('\n')
     : '(this is the first revision)';
 
   return [

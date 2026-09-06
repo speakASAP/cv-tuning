@@ -129,14 +129,14 @@ describe('ApplicationsService.revise', () => {
     expect(revise.revise).toHaveBeenCalled();
   });
 
-  it('lands in generation_failed with the error when a turn dies mid-flight', async () => {
+  it('returns to in_review with the error when a turn dies mid-flight', async () => {
     const { service, applications } = makeService({
       reviseImpl: jest.fn().mockRejectedValue(new Error('model exploded')),
     });
     await expect(service.revise('u1', 'app-1', 'x', 'text')).rejects.toThrow('model exploded');
     expect(applications.update).toHaveBeenCalledWith(
       'app-1',
-      expect.objectContaining({ state: 'generation_failed', stateError: 'model exploded' }),
+      expect.objectContaining({ state: 'in_review', stateError: 'model exploded' }),
     );
   });
 

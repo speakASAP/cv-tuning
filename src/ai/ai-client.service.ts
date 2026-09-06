@@ -63,7 +63,13 @@ export class AiClientService {
   async complete(input: AiCompletionRequest): Promise<AiCompletion> {
     const startedAt = Date.now();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const promptBytes = Buffer.byteLength(`${input.systemPrompt}\n${input.userPrompt}`, 'utf8');
+    this.logger.log(
+      `${new Date().toISOString()} ai complete start tier=${input.tier} prompt_bytes=${promptBytes} ` +
+        `timeout_ms=${timeoutMs} correlation=${input.correlationId ?? 'none'}`,
+    );
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     let response: Response;
     try {
@@ -85,7 +91,10 @@ export class AiClientService {
       });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      this.logger.error(`ai-microservice unreachable at ${this.aiServiceUrl}/ai/complete: ${message}`);
+      this.logger.error(
+        `${new Date().toISOString()} ai-microservice unreachable at ${this.aiServiceUrl}/ai/complete ` +
+          `after ${Date.now() - startedAt}ms: ${message}`,
+      );
       throw new Error(`ai-microservice request failed: ${message}`);
     } finally {
       clearTimeout(timeout);
@@ -108,7 +117,10 @@ export class AiClientService {
     };
 
     if (payload.error_code) {
-      this.logger.error(`ai-microservice error ${payload.error_code}: ${(payload.error_message ?? '').slice(0, 300)}`);
+      this.logger.error(
+        `${new Date().toISOString()} ai-microservice error ${payload.error_code} ` +
+          `after ${Date.now() - startedAt}ms: ${(payload.error_message ?? '').slice(0, 300)}`,
+      );
       throw new Error(`ai-microservice error ${payload.error_code}: ${(payload.error_message ?? '').slice(0, 300)}`);
     }
 
@@ -149,7 +161,10 @@ export class AiClientService {
       );
     }
 
-    this.logger.log(`ai complete tier=${input.tier} model=${modelUsed} in ${Date.now() - startedAt}ms`);
+    this.logger.log(
+      `${new Date().toISOString()} ai complete done tier=${input.tier} model=${modelUsed} ` +
+        `duration_ms=${Date.now() - startedAt} degraded=${degraded}`,
+    );
     return { text, modelUsed, degraded };
   }
 

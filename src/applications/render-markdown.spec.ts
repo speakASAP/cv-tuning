@@ -10,8 +10,9 @@ describe('extractH1Name', () => {
     expect(extractH1Name('\n\n# Jane Doe\n## Experience')).toBe('Jane Doe');
   });
 
-  it('raises a clear, actionable error when there is no H1 at all', () => {
-    expect(() => extractH1Name('some text\n- a bullet')).toThrow(MissingMasterNameError);
+  it('uses a leading plain-text line as the name, including when a pasted H1 follows', () => {
+    expect(extractH1Name('some text\n- a bullet')).toBe('some text');
+    expect(extractH1Name('plain name line\n\n# A Pasted Title')).toBe('plain name line');
   });
 
   it('raises rather than guessing when multiple H1s appear, as linkedin.importer.ts#toMarkdown produces', () => {
@@ -22,17 +23,14 @@ describe('extractH1Name', () => {
     );
   });
 
-  it('the missing-name error names what is missing and how to fix it', () => {
-    expect(() => extractH1Name('no heading at all')).toThrow(/add a name heading|# Your Name/i);
+  it('raises when the document is empty, so a nameless CV cannot be exported', () => {
+    expect(() => extractH1Name('')).toThrow(/add a name heading|# Your Name/i);
+    expect(() => extractH1Name('   \n\n')).toThrow(MissingMasterNameError);
   });
 
-  it('refuses an H1 that follows other content, rather than promoting a pasted title to a name', () => {
-    // The exact production failure this rule exists for (observed 2026-09-05). A master CV
-    // whose name is PLAIN TEXT on line 1 — the shape every gdocs/PDF/OCR import produces,
-    // since none of them emit a `#` — with a project write-up pasted below it. That
-    // write-up's own `# Statex Microservices Ecosystem — Project Description` was the
-    // document's ONLY H1, so a uniqueness-only check accepted it and rendered a project
-    // title as the candidate's name on the H1 line of an exported CV.
+  it('uses the leading plain-text name rather than a pasted document title further down', () => {
+    // The 2026-09-05 production failure used the buried H1 as the candidate's name. The
+    // first line is what the user wrote as their name; the `#` below is pasted content.
     const markdown = [
       'Ing. Sergej Stasok',
       'AI, System Integration, Project Management',
@@ -44,7 +42,7 @@ describe('extractH1Name', () => {
       '**Overview of applications and shared microservices.**',
     ].join('\n');
 
-    expect(() => extractH1Name(markdown)).toThrow(MissingMasterNameError);
+    expect(extractH1Name(markdown)).toBe('Ing. Sergej Stasok');
   });
 
   it('still accepts a leading H1 when unrelated content follows it', () => {
@@ -53,14 +51,12 @@ describe('extractH1Name', () => {
     expect(extractH1Name('# Jane Doe\n\ncontact\n\n## Experience\n- did a thing')).toBe('Jane Doe');
   });
 
-  it('the missing-name error explains that the heading must lead the document', () => {
-    // A user whose master already contains a `# ...` further down needs to be told that
-    // position is the problem; "add a name heading" alone would read as already-done.
-    expect(() => extractH1Name('plain name line\n\n# A Pasted Title')).toThrow(/first line/i);
+  it('the missing-name error still fires when the first line is structure, not a name', () => {
+    expect(() => extractH1Name('- a bullet\n\n# A Pasted Title')).toThrow(MissingMasterNameError);
   });
 });
 
-describe('H1 headline: "<Job Title> - <Name>"', () => {
+describe('H1 is the candidate name; position is the subtitle', () => {
   const master = '# Jane Doe\n\njane@example.com\n\n## Professional Experience\n';
   const bullets = [{ text: 'Shipped a thing.', sourceFactId: 'f1' }];
   const facts = [
@@ -75,47 +71,49 @@ describe('H1 headline: "<Job Title> - <Name>"', () => {
     },
   ];
 
-  it('composes the target job title and the candidate name into the H1', () => {
+  it('puts the name in the H1 and the target role on the next line', () => {
     const markdown = buildRenderMarkdown(master, bullets, facts, 'App Developer');
-    expect(markdown.split('\n')[0]).toBe('# App Developer - Jane Doe');
+    expect(markdown.split('\n')[0]).toBe('# Jane Doe');
+    expect(markdown).toContain('\n\nApp Developer\n\n');
   });
 
   it('falls back to the name alone when the job title is absent or blank', () => {
-    // A posting does not always yield a parseable title. A headline-less CV is correct;
-    // "# - Jane Doe" is broken.
     expect(buildRenderMarkdown(master, bullets, facts, null).split('\n')[0]).toBe('# Jane Doe');
     expect(buildRenderMarkdown(master, bullets, facts, '   ').split('\n')[0]).toBe('# Jane Doe');
     expect(buildRenderMarkdown(master, bullets, facts).split('\n')[0]).toBe('# Jane Doe');
   });
 
   it('reduces a composed H1 back to the bare name, so confirmClaim cannot nest titles', () => {
-    // confirmClaim re-renders from a PRIOR RENDER's markdown, feeding our own output back in.
-    // Without the split this produced "App Developer - App Developer - Jane Doe", growing by
-    // one title per decision.
     const first = buildRenderMarkdown(master, bullets, facts, 'App Developer');
     expect(extractH1Name(first)).toBe('Jane Doe');
     expect(extractH1JobTitle(first)).toBe('App Developer');
 
     const second = buildRenderMarkdown(first, bullets, facts, extractH1JobTitle(first));
     const third = buildRenderMarkdown(second, bullets, facts, extractH1JobTitle(second));
-    expect(second.split('\n')[0]).toBe('# App Developer - Jane Doe');
-    // Byte-idempotent: spec §6.3 reuses the artifact sha256 for identity.
+    expect(second.split('\n')[0]).toBe('# Jane Doe');
     expect(second).toBe(first);
     expect(third).toBe(second);
   });
 
-  it('neutralizes a separator inside the job title so the name half stays recoverable', () => {
-    const markdown = buildRenderMarkdown(master, bullets, facts, 'Developer - Backend');
-    expect(markdown.split('\n')[0]).toBe('# Developer Backend - Jane Doe');
-    expect(extractH1Name(markdown)).toBe('Jane Doe');
+  it('recovers the role from a legacy "# Title - Name" H1', () => {
+    expect(extractH1JobTitle('# App Developer - Jane Doe\n\njane@example.com')).toBe('App Developer');
+    expect(extractH1Name('# App Developer - Jane Doe\n\n## Experience')).toBe('Jane Doe');
   });
 
-  it('extractH1JobTitle returns null for a bare-name H1', () => {
+  it('neutralizes a separator inside the job title so the name half stays recoverable', () => {
+    const markdown = buildRenderMarkdown(master, bullets, facts, 'Developer - Backend');
+    expect(markdown.split('\n')[0]).toBe('# Jane Doe');
+    expect(markdown).toContain('\n\nDeveloper Backend\n\n');
+    expect(extractH1Name(markdown)).toBe('Jane Doe');
+    expect(extractH1JobTitle(markdown)).toBe('Developer Backend');
+  });
+
+  it('extractH1JobTitle returns null for a bare-name H1 with contact-like first line', () => {
     expect(extractH1JobTitle('# Jane Doe\n\n## Experience')).toBeNull();
+    expect(extractH1JobTitle('# Jane Doe\njane@example.com\n## Experience')).toBeNull();
   });
 
   it('keeps a hyphenated NAME intact when there is no job title half', () => {
-    // "Jane Doe-Smith" has no " - " separator, so nothing is split off.
     expect(extractH1Name('# Jane Doe-Smith\n\n## Experience')).toBe('Jane Doe-Smith');
   });
 });

@@ -110,6 +110,20 @@
   max-width: min(92vw, 44rem);
   margin: 0;
   box-shadow: 0 12px 30px #17203340;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mic-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mic-button svg {
+  flex: none;
 }
 
 .cv-view-tabs {
@@ -157,9 +171,15 @@
 }
 
 .cv-preview-name {
-  margin: 0;
-  font-size: 1.5rem;
+  margin: 0 0 4px;
+  font-size: 1.55rem;
   color: #213b70;
+}
+
+.cv-preview-role {
+  margin: 0 0 8px;
+  color: #52627d;
+  font-weight: 650;
 }
 
 .cv-preview-contact {
