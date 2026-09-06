@@ -312,8 +312,19 @@ and is a contract — the render feeds a sha256 that spec §6.3 reuses as artifa
   and 503 for an unreachable auth service; an empty AI completion raises rather than
   returning a blank section. Every existing catch block re-throws or logs with full context —
   match that.
-- **AI client timeout must stay above the LiteLLM proxy's 120s**, or the fallback chain never
-  runs and the aborted attempts leave no trace in the proxy log.
+- **The AI timeout chain must nest, and Cloudflare sets the ceiling.** `cv.alfares.cz` is
+  proxied by Cloudflare, whose free plan cuts the origin off at ~100s and serves its own 504
+  HTML page — nothing in this stack can extend that. So the budgets nest inside it: LiteLLM's
+  smart chain 73s (58 + 10 + 5, `litellm_config.yaml`) < `DEFAULT_UPSTREAM_TIMEOUT_MS` 85s
+  (sent as `timeout_ms`, the budget ai-microservice applies to its own LiteLLM call) <
+  `DEFAULT_TIMEOUT_MS` 95s (this client's own abort) < ~100s edge. Each inner deadline must
+  fire before the one outside it, or it is decorative: if this client aborted first the
+  structured `AI_HTTP_TIMEOUT` would be lost and a timeout would look like an unreachable
+  service, and if Cloudflare fires first the user gets an HTML error page instead of ours
+  (the 2026-09-06 revise failure). Raising any link means re-checking every link outside it.
+  ai-microservice's global `LITELLM_TIMEOUT_MS` (75s) is deliberately NOT the knob to turn —
+  it is shared with education-service, which allows 180s and retries once; send a per-request
+  `timeout_ms` instead (clamped there to `MAX_CALLER_TIMEOUT_MS`).
 - Commit to `main` and the ecosystem deploy queue picks it up; don't run `deploy.sh` by hand
   unless rolling back or explicitly asked.
 - **Privacy boundary:** `AiClientService.complete()` pseudonymizes both system and user prompts
