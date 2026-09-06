@@ -4,6 +4,13 @@ export const IDENTITY_PROVIDER = 'CV_IDENTITY_PROVIDER';
 export const AUTH_USER_LOOKUP_URL = 'CV_AUTH_USER_LOOKUP_URL';
 export const IDP_FETCH = 'CV_IDP_FETCH';
 export const AUTH_USER_LOOKUP_TOKEN = 'CV_AUTH_USER_LOOKUP_TOKEN';
+/**
+ * Per-pair Auth-issued RS256 credential for `svc-cv-tuning--auth-microservice`,
+ * holding `internal:auth-microservice:user-existence`. This is what the service
+ * identity standard requires; AUTH_USER_LOOKUP_TOKEN is the shared static token
+ * it replaces and is sent only while auth still accepts it.
+ */
+export const AUTH_USER_LOOKUP_BEARER = 'CV_AUTH_USER_LOOKUP_BEARER';
 export const AUTH_USER_LOOKUP_SERVICE_NAME = 'CV_AUTH_USER_LOOKUP_SERVICE_NAME';
 
 const LOOKUP_TIMEOUT_MS = 3000;
@@ -42,6 +49,7 @@ export class HttpIdentityProvider implements IdentityProviderPort {
   constructor(
     @Optional() @Inject(AUTH_USER_LOOKUP_URL) private readonly lookupUrl: string | null = null,
     @Optional() @Inject(AUTH_USER_LOOKUP_TOKEN) private readonly lookupToken: string | null = null,
+    @Optional() @Inject(AUTH_USER_LOOKUP_BEARER) private readonly lookupBearer: string | null = null,
     @Optional() @Inject(AUTH_USER_LOOKUP_SERVICE_NAME) private readonly serviceName = 'cv-tuning',
     @Optional() @Inject(IDP_FETCH) private readonly fetchImpl: typeof fetch = fetch,
   ) {}
@@ -63,6 +71,10 @@ export class HttpIdentityProvider implements IdentityProviderPort {
       response = await this.fetchImpl(`${this.lookupUrl}/${encodeURIComponent(userId)}`, {
         method: 'GET',
         headers: {
+          // Auth tries the bearer first and identifies this caller as its own
+          // principal. The two legacy headers are the migration window only, and
+          // are dropped once auth sets ALLOW_INTERNAL_STATIC_TOKEN=false.
+          ...(this.lookupBearer ? { authorization: `Bearer ${this.lookupBearer}` } : {}),
           ...(this.lookupToken ? { 'x-internal-service-token': this.lookupToken } : {}),
           'x-service-name': this.serviceName,
         },
