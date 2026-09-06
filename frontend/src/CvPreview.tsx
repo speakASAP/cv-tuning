@@ -89,14 +89,11 @@ export function CvPreview({ markdown }: { markdown: string }) {
     return <p className="muted">Nothing to preview yet.</p>;
   }
   const { name, contactParts, sections } = parse(markdown);
-  const role = contactParts[0] && !/@|https?:\/\/|\+\d/.test(contactParts[0]) ? contactParts[0] : null;
-  const details = role ? contactParts.slice(1) : contactParts;
 
   return (
     <div className="cv-preview">
       {name && <h1 className="cv-preview-name">{name}</h1>}
-      {role && <p className="cv-preview-role">{role}</p>}
-      {details.length > 0 && <p className="cv-preview-contact">{details.join('  ·  ')}</p>}
+      {contactParts.length > 0 && <p className="cv-preview-contact">{contactParts.join('  ·  ')}</p>}
       {sections.map((section, sectionIndex) => (
         <section key={sectionIndex} className="cv-preview-section">
           <h2>{section.heading}</h2>

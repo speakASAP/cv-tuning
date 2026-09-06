@@ -56,7 +56,7 @@ describe('extractH1Name', () => {
   });
 });
 
-describe('H1 is the candidate name; position is the subtitle', () => {
+describe('H1 is position and name', () => {
   const master = '# Jane Doe\n\njane@example.com\n\n## Professional Experience\n';
   const bullets = [{ text: 'Shipped a thing.', sourceFactId: 'f1' }];
   const facts = [
@@ -71,10 +71,9 @@ describe('H1 is the candidate name; position is the subtitle', () => {
     },
   ];
 
-  it('puts the name in the H1 and the target role on the next line', () => {
+  it('puts the target role and the name in the H1', () => {
     const markdown = buildRenderMarkdown(master, bullets, facts, 'App Developer');
-    expect(markdown.split('\n')[0]).toBe('# Jane Doe');
-    expect(markdown).toContain('\n\nApp Developer\n\n');
+    expect(markdown.split('\n')[0]).toBe('# App Developer - Jane Doe');
   });
 
   it('falls back to the name alone when the job title is absent or blank', () => {
@@ -90,25 +89,24 @@ describe('H1 is the candidate name; position is the subtitle', () => {
 
     const second = buildRenderMarkdown(first, bullets, facts, extractH1JobTitle(first));
     const third = buildRenderMarkdown(second, bullets, facts, extractH1JobTitle(second));
-    expect(second.split('\n')[0]).toBe('# Jane Doe');
+    expect(second.split('\n')[0]).toBe('# App Developer - Jane Doe');
     expect(second).toBe(first);
     expect(third).toBe(second);
   });
 
-  it('recovers the role from a legacy "# Title - Name" H1', () => {
+  it('recovers the role from a composed "# Title - Name" H1', () => {
     expect(extractH1JobTitle('# App Developer - Jane Doe\n\njane@example.com')).toBe('App Developer');
     expect(extractH1Name('# App Developer - Jane Doe\n\n## Experience')).toBe('Jane Doe');
   });
 
   it('neutralizes a separator inside the job title so the name half stays recoverable', () => {
     const markdown = buildRenderMarkdown(master, bullets, facts, 'Developer - Backend');
-    expect(markdown.split('\n')[0]).toBe('# Jane Doe');
-    expect(markdown).toContain('\n\nDeveloper Backend\n\n');
+    expect(markdown.split('\n')[0]).toBe('# Developer Backend - Jane Doe');
     expect(extractH1Name(markdown)).toBe('Jane Doe');
     expect(extractH1JobTitle(markdown)).toBe('Developer Backend');
   });
 
-  it('extractH1JobTitle returns null for a bare-name H1 with contact-like first line', () => {
+  it('extractH1JobTitle returns null for a bare-name H1', () => {
     expect(extractH1JobTitle('# Jane Doe\n\n## Experience')).toBeNull();
     expect(extractH1JobTitle('# Jane Doe\njane@example.com\n## Experience')).toBeNull();
   });
@@ -545,6 +543,41 @@ describe('buildRenderMarkdown: contact block', () => {
 
     expect(() => renderToDocument(markdown)).not.toThrow();
     expect(renderToDocument(markdown).contact.parts).toEqual(['jane@example.com']);
+  });
+
+  it('stops at a thematic break so pasted body content below a header rule is not contact', () => {
+    const master = [
+      'Ing. Sergej Stasok',
+      'AI, System Integration',
+      'Contact Information:',
+      '* Email: someone@example.com',
+      '* Phone: +420 774 287 541',
+      '* LinkedIn: https://www.linkedin.com/in/example/',
+      '________________',
+      '',
+      'Professional Summary',
+      'Experienced IT professional...',
+      '',
+      '# Statex Microservices Ecosystem — Project Description',
+      '',
+      '**Overview of applications and shared microservices.**',
+      '',
+      '---',
+      '',
+      '## Vision',
+    ].join('\n');
+
+    const markdown = buildRenderMarkdown(master, [], [], 'Technical Deployment Lead');
+    expect(markdown.split('\n')[0]).toBe('# Technical Deployment Lead - Ing. Sergej Stasok');
+    expect(renderToDocument(markdown).contact.parts).toEqual([
+      'AI, System Integration',
+      'Contact Information:',
+      'someone@example.com',
+      '+420 774 287 541',
+      'https://www.linkedin.com/in/example/',
+    ]);
+    expect(markdown).not.toContain('Statex');
+    expect(markdown).not.toContain('Professional Summary');
   });
 });
 

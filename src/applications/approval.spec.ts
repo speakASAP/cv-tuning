@@ -18,7 +18,14 @@ const bullet = (text: string, verdict: string) => ({
 });
 
 function makeService(render: Record<string, unknown>, state = 'in_review') {
-  const application = { id: 'app-1', userId: 'u1', state, revisionCount: 1 };
+  const application = {
+    id: 'app-1',
+    userId: 'u1',
+    state,
+    revisionCount: 1,
+    masterVersionId: 'mv1',
+    jobId: 'j1',
+  };
   const applications = {
     findOne: jest.fn().mockResolvedValue(application),
     update: jest.fn().mockResolvedValue(undefined),
@@ -30,7 +37,14 @@ function makeService(render: Record<string, unknown>, state = 'in_review') {
   };
   // 12 positional args — the full Phase 4 signature from Global Constraints.
   const service = new ApplicationsService(
-    applications as never, renders as never, {} as never, {} as never,
+    applications as never, renders as never,
+    { get: jest.fn(async () => ({ job: { id: 'j1', title: 'App Developer', parsed: {} } })) } as never,
+    {
+      getVersion: jest.fn(async () => ({
+        master: { markdown: '# Jane Doe\n\njane@example.com\n\n## Experience\n' },
+        facts: [],
+      })),
+    } as never,
     {} as never, {} as never, {} as never, { find: jest.fn(), save: jest.fn() } as never,
     { find: jest.fn().mockResolvedValue([]), save: jest.fn() } as never,
     { render: jest.fn().mockResolvedValue({ content: Buffer.from('p'), sha256: 's', mimeType: 'application/pdf', filename: 'c.pdf' }) } as never,

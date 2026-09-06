@@ -36,7 +36,13 @@ const OVERREACH_B = {
 
 /** A minimal, real in-memory `cv_render` store: confirmClaim's own re-read logic under test. */
 function makeService(opts: { state?: string } = {}) {
-  const application = { id: 'app-1', userId: 'u1', state: opts.state ?? 'in_review' };
+  const application = {
+    id: 'app-1',
+    userId: 'u1',
+    state: opts.state ?? 'in_review',
+    masterVersionId: 'mv1',
+    jobId: 'j1',
+  };
   const applications = {
     findOne: jest.fn().mockResolvedValue(application),
     update: jest.fn().mockResolvedValue(undefined),
@@ -47,7 +53,7 @@ function makeService(opts: { state?: string } = {}) {
       id: 'r1',
       applicationId: 'app-1',
       revisionNo: 1,
-      markdown: '# Jane Doe\n\n## Tailored Highlights\n\n- led a team of 12 engineers\n- cut infra costs by 40%',
+      markdown: '# App Developer - Jane Doe\n\njane@example.com\n\n## Tailored Highlights\n\n- led a team of 12 engineers\n- cut infra costs by 40%',
       factsSnapshot: [],
       provenance: { bullets: [OVERREACH_A, OVERREACH_B], droppedBullets: [] },
       confirmedOverreach: [],
@@ -77,11 +83,21 @@ function makeService(opts: { state?: string } = {}) {
     }),
   };
 
+  const jobs = {
+    get: jest.fn(async () => ({ job: { id: 'j1', title: 'App Developer', parsed: {} } })),
+  };
+  const master = {
+    getVersion: jest.fn(async () => ({
+      master: { markdown: '# Jane Doe\n\njane@example.com\n\n## Experience\n' },
+      facts: [],
+    })),
+  };
+
   const service = new ApplicationsService(
     applications as never,
     renders as never,
-    {} as never,
-    {} as never,
+    jobs as never,
+    master as never,
     {} as never,
     {} as never,
     {} as never,
@@ -94,7 +110,7 @@ function makeService(opts: { state?: string } = {}) {
     { startOutcomeWatch: jest.fn(), deliverSignal: jest.fn() } as never,
   );
 
-  return { service, applications, renders, rows };
+  return { service, applications, renders, rows, jobs, master };
 }
 
 describe('ApplicationsService.confirmClaim', () => {

@@ -4,6 +4,9 @@
 .field-help{margin:-6px 0 0;color:#657188;font-size:.82rem;line-height:1.45}.field-help strong{color:#3c4f72}
 
 .notice.working{display:flex;align-items:center;gap:10px}.notice.working:before{content:"";width:14px;height:14px;flex:none;border:2px solid #3157a6;border-top-color:transparent;border-radius:50%;animation:cv-spin .8s linear infinite}@keyframes cv-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.notice.working:before{animation:none}}
+.application .notice.working{margin:8px 0 0;padding:8px 10px;background:#eff6ff;color:#172033;border-left:4px solid #a9c1ff;font-size:.78rem}
+.application.selected .notice.working{background:#243f7a;color:#eff5ff;border-left-color:#a9c1ff}
+.application.selected .notice.working:before{border-color:#a9c1ff;border-top-color:transparent}
 
 .boundary {
   max-width: 40rem;
@@ -135,9 +138,14 @@
   flex-wrap: wrap;
 }
 
-/* Stays visible above whichever of Preview/Markdown/Diff is active, so the position a CV is
-   for is never ambiguous - the CV content itself always starts with the candidate own name,
-   which this line is not a substitute for. */
+/* Stays visible in the review header so the position a CV is for is never ambiguous. */
+.review-head .cv-view-position {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: #1d469a;
+}
+
 .cv-view-position {
   margin: 0 0 10px;
   font-weight: 650;
@@ -174,12 +182,6 @@
   margin: 0 0 4px;
   font-size: 1.55rem;
   color: #213b70;
-}
-
-.cv-preview-role {
-  margin: 0 0 8px;
-  color: #52627d;
-  font-weight: 650;
 }
 
 .cv-preview-contact {

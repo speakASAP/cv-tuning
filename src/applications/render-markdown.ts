@@ -51,8 +51,9 @@ const H1_TITLE_SEPARATOR = ' - ';
  * it into "App Developer - App Developer - Jane Doe", growing by one title per decision.
  *
  * Splits on the LAST separator, so a job title that itself contains " - " still yields the
- * name. Legacy composed H1s still appear in stored renders; current output uses a bare-name
- * H1 plus a subtitle, so this split is a recovery path, not the write path.
+ * name. `composeH1` additionally neutralises the separator inside the title, so that case
+ * should not arise from our own output — this stays last-match anyway rather than trusting an
+ * invariant a hand-edited render (manual edit is a supported path) could break.
  */
 function nameFromComposedH1(heading: string): string {
   const at = heading.lastIndexOf(H1_TITLE_SEPARATOR);
@@ -64,41 +65,53 @@ function nameFromComposedH1(heading: string): string {
 }
 
 /**
- * Recovers the target role from a prior render so confirmClaim can re-emit it without
- * re-fetching the job.
+ * Recovers the job-title half of a composed `# <Job Title> - <Name>` H1, or `null` when the
+ * heading carries a bare name.
  *
- * Legacy renders stored `# <Job Title> - <Name>`. Current renders store the name as H1 and
- * the role as the first contact line (a line with no `@`, URL, or phone marker).
+ * `confirmClaim` re-renders from a prior RENDER's markdown and deliberately does not re-read
+ * the job (see applications.service.ts) — the render it starts from already states the target
+ * role, so the title is recovered from there rather than re-fetched. That keeps a
+ * confirm-or-drop decision from silently stripping the headline off the CV.
  */
 export function extractH1JobTitle(markdown: string): string | null {
   const lines = markdown.split('\n').map((line) => line.trim());
   const matches = lines
     .map((line) => H1.exec(line))
     .filter((m): m is RegExpExecArray => m !== null);
-  if (matches.length === 1) {
-    const heading = matches[0][1].trim();
-    const at = heading.lastIndexOf(H1_TITLE_SEPARATOR);
-    if (at !== -1) {
-      const title = heading.slice(0, at).trim();
-      const name = heading.slice(at + H1_TITLE_SEPARATOR.length).trim();
-      if (title.length > 0 && name.length > 0) return title;
-    }
-  }
+  if (matches.length !== 1) return null;
 
-  const contact = extractContactLines(markdown);
-  const first = contact[0];
-  if (!first || /@|https?:\/\/|\+\d/.test(first)) return null;
-  return first;
+  const heading = matches[0][1].trim();
+  const at = heading.lastIndexOf(H1_TITLE_SEPARATOR);
+  if (at === -1) return null;
+
+  const title = heading.slice(0, at).trim();
+  const name = heading.slice(at + H1_TITLE_SEPARATOR.length).trim();
+  // Mirrors nameFromComposedH1's guard: with nothing after the separator the heading is a bare
+  // name that happens to end in one, not a title/name pair.
+  return title.length > 0 && name.length > 0 ? title : null;
 }
 
-function normalizeJobTitle(jobTitle: string | null | undefined): string {
-  return (jobTitle ?? '').replace(/\s+/g, ' ').split(H1_TITLE_SEPARATOR).join(' ').trim();
+/**
+ * Builds the render's H1 from the target job title and the candidate's name.
+ *
+ * The job title is the APPLICATION's target role, not a claim about the candidate's history:
+ * it restates the posting the user is applying to, which is why composing it here needs no
+ * grounding pass. A missing or blank title degrades to the name alone rather than emitting a
+ * dangling separator — the job title is not always parseable from a posting, and a CV with no
+ * headline is correct where "# - Jane Doe" is broken.
+ *
+ * The separator is stripped from the title itself so `nameFromComposedH1` can always split the
+ * result back apart.
+ */
+function composeH1(jobTitle: string | null | undefined, name: string): string {
+  const title = (jobTitle ?? '').replace(/\s+/g, ' ').split(H1_TITLE_SEPARATOR).join(' ').trim();
+  return title.length > 0 ? `${title}${H1_TITLE_SEPARATOR}${name}` : name;
 }
 
 /**
  * Assembles `cv_render.markdown` to the ONLY canonical heading convention in the repo
- * (`src/export/cv-document.ts`'s module doc comment): H1 = candidate name, H2 = section,
- * H3 = entry, `- ` = bullet.
+ * (`src/export/cv-document.ts`'s module doc comment): H1 = `# <Job Title> - <Name>` (or the
+ * bare name when no title is available), H2 = section, H3 = entry, `- ` = bullet.
  *
  * Since Phase 5 this is a real multi-section reconstruction. `FactSnapshot` now carries
  * `{section, org, period}`, derived deterministically **in code** by walking the master
@@ -195,9 +208,9 @@ interface RenderSection {
  * `facts` is required, not defaulted: an omitted snapshot would quietly file every bullet
  * under `GENERAL_SECTION` and produce a structurally poorer CV with no error anywhere.
  *
- * `jobTitle` is the APPLICATION's target role and is emitted as a subtitle under the name
- * H1, not folded into it. `# App Developer - Jane Doe` made the exported identity the job
- * title. A missing title omits the subtitle rather than emitting a dangling separator.
+ * `jobTitle` is the APPLICATION's target role and becomes the first half of the H1
+ * (`# App Developer - Jane Doe`). It is optional because a posting does not always yield a
+ * parseable title, and a headline-less CV is correct where a dangling separator is broken.
  * It restates the posting the user chose to apply to — not a claim about their history — so
  * it needs no grounding pass, exactly like the code-built salutation in
  * `cover-letter-render.ts`.
@@ -267,17 +280,15 @@ export function buildRenderMarkdown(
     ...sections.filter((s) => s.heading === GENERAL_SECTION),
   ];
 
-  // H1 is the name only (`cv-document.ts`). The target role is the subtitle under it, not
-  // folded into the identity heading — `# Job Title - Name` made the exported name the job.
-  const title = normalizeJobTitle(jobTitle);
-  const parts = [`# ${name}`];
-  const rest = contact.filter((part) => part !== title);
-  if (title) parts.push(title);
+  // `<Job Title> - <Name>`, or the name alone when no title is available. `extractH1Name`
+  // above already reduced a composed heading back to the bare name, so re-rendering a prior
+  // render (confirmClaim) recomposes rather than nesting — see nameFromComposedH1.
+  const parts = [`# ${composeH1(jobTitle, name)}`];
   // Re-emitted in `cv-document.ts`'s position for contact detail: after the H1, before the
   // first `## `. Joined with ` | ` because that is the separator the parser splits on, which
   // is what makes this round-trip stable (see `extractContactLines`).
-  if (rest.length > 0) {
-    parts.push(rest.join(' | '));
+  if (contact.length > 0) {
+    parts.push(contact.join(' | '));
   }
   const proof = selectProofFacts(facts);
 
@@ -381,8 +392,26 @@ function normalizeBulletText(text: string): string {
   return collapsed.replace(/^#+\s*/, '');
 }
 
+/** A markdown thematic break — common paste separator between header and body. */
+const HORIZONTAL_RULE = /^(?:-{3,}|_{3,}|\*{3,})$/;
+
 /**
- * The contact line(s) the master CV states between its H1 and its first `## ` heading —
+ * Pull a contact value out of a list item like `* Email: a@b.com` or `* https://…`.
+ * Plain bullets that are not contact detail stay skipped — they belong in sections.
+ */
+function contactFromListItem(line: string): string | null {
+  const body = line.replace(/^(?:[-*+]\s+)\s*/, '').trim();
+  if (!body) return null;
+  if (/@|https?:\/\/|\+\d/.test(body)) {
+    // Prefer the URL/email/phone token when the line is a labelled field.
+    const token = body.match(/https?:\/\/\S+|[^\s]+@[^\s]+|\+\d[\d\s()-]+/);
+    return (token?.[0] ?? body).replace(/\s+/g, ' ').trim();
+  }
+  return null;
+}
+
+/**
+ * The contact line(s) the master CV states between its name and its first section —
  * email, phone, links. `cv-document.ts` parses exactly that position into `contact.parts`
  * (splitting on `|`) and both writers render them, so without this the exported CV goes out
  * with no way for an employer to reply to it.
@@ -395,12 +424,13 @@ function normalizeBulletText(text: string): string {
  * `render-markdown.spec.ts` — a second pass that duplicated or dropped the block would only
  * surface in production, on the artifact the user downloads.
  *
- * Only lines that are plainly not structure are taken. A `#`/`##`/`###` heading, a `- `/`* `
- * bullet, or a `>` quote before the first section is markdown structure, not contact detail,
- * and swallowing one would put a CV bullet in the exported document's header. Everything else
- * is kept verbatim: a contact line legitimately contains em dashes and parentheses
- * ("Prague, CZ — open to relocation (EU)") and is never parsed as an entry heading, because
- * this position is read before any section exists.
+ * Only lines that are plainly not structure are taken. A `#`/`##`/`###` heading, a thematic
+ * break (`---`), or a non-contact list/quote before the first section is markdown structure,
+ * not contact detail. List items that *do* carry an email, phone, or URL are kept — that is
+ * the shape gdocs/LinkedIn pastes produce (`* Email: a@b.com`). Everything else in the
+ * header region is kept verbatim: a contact line legitimately contains em dashes and
+ * parentheses ("Prague, CZ — open to relocation (EU)") and is never parsed as an entry
+ * heading, because this position is read before any section exists.
  *
  * A master with no contact block yields an empty array, which emits nothing. That is a normal
  * input, not a failure.
@@ -415,6 +445,8 @@ export function extractContactLines(markdown: string): string[] {
 
     // The first `## ` ends the contact region; everything after it belongs to a section.
     if (line.startsWith('## ')) break;
+    // A paste separator (`---` / `___`) ends the header even when the body uses no `##`.
+    if (HORIZONTAL_RULE.test(line)) break;
 
     if (!seenName) {
       // Skip the name line itself — a leading `# Name` or the leading plain-text name.
@@ -423,9 +455,14 @@ export function extractContactLines(markdown: string): string[] {
       continue;
     }
 
-    // A later heading is pasted content or a section, not contact. Lists are structure.
+    // A later heading is pasted content or a section, not contact.
     if (line.startsWith('#')) break;
-    if (LIST_OR_QUOTE.test(line)) continue;
+
+    if (LIST_OR_QUOTE.test(line)) {
+      const fromList = contactFromListItem(line);
+      if (fromList) parts.push(fromList);
+      continue;
+    }
 
     parts.push(
       ...line

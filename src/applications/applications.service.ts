@@ -205,10 +205,7 @@ export class ApplicationsService {
           `duration_ms=${Date.now() - entailStarted}`,
       );
 
-      // Structured per the `cv-document.ts` H1/H2/H3 convention so PDF/DOCX export can parse
-      // it. `snapshot` is passed so the builder can group bullets under the section, employer,
-      // and period their source facts were derived from — see render-markdown.ts.
-      // H1 is the candidate's name; `job.title` is the subtitle under it, not a claim.
+      // H1 is `# <job title> - <candidate name>`; `job.title` is the target role, not a claim.
       const markdown = buildRenderMarkdown(
         pinned.master.markdown,
         validated.bullets,
@@ -631,18 +628,30 @@ export class ApplicationsService {
       },
     ];
 
-    // `source.markdown` already carries the name H1 and role subtitle — both halves are
-    // reused directly rather than re-fetching the master or the job. The title is recovered
-    // explicitly because `extractH1Name` returns the bare name; without it, a confirm-or-drop
-    // decision would silently strip the position line off the CV.
-    // The section/entry structure is rebuilt from `source.factsSnapshot` (the SAME snapshot the
-    // new render stores below), not carried over from the prior markdown, so re-rendering is
-    // idempotent instead of accumulating a copy of the previous layout.
+    // Identity (name + contact) comes from the pinned master, not the prior render: an older
+    // render may still carry a buried paste-title as its H1 (the 2026-09-05 failure), and
+    // re-extracting from that would keep shipping a fabricated name. Prefer the role recovered
+    // from the prior composed H1; fall back to the job when the prior render never had one.
+    // Structure is rebuilt from `source.factsSnapshot` (the SAME snapshot the new render
+    // stores below), not carried over from the prior markdown, so re-rendering is idempotent
+    // instead of accumulating a copy of the previous layout.
+    const pinned = await this.master.getVersion(userId, application.masterVersionId);
+    if (!pinned) {
+      throw new NotFoundException(
+        `application ${applicationId} pins master version ${application.masterVersionId}, which no longer exists`,
+      );
+    }
+    const fromRender = extractH1JobTitle(source.markdown);
+    let jobTitle = fromRender;
+    if (!jobTitle) {
+      const { job } = await this.jobs.get(userId, application.jobId);
+      jobTitle = job.title;
+    }
     const markdown = buildRenderMarkdown(
-      source.markdown,
+      pinned.master.markdown,
       bullets,
       source.factsSnapshot,
-      extractH1JobTitle(source.markdown),
+      jobTitle,
     );
     const revision = revisionNo + 1;
 

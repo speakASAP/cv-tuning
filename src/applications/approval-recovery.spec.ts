@@ -74,6 +74,8 @@ function makeHarness(opts: {
     state: opts.state ?? 'in_review',
     stateError: opts.stateError ?? null,
     revisionCount: 0,
+    masterVersionId: 'mv1',
+    jobId: 'j1',
   };
   const applications = {
     findOne: jest.fn(async () => ({ ...application })),
@@ -160,8 +162,13 @@ function makeHarness(opts: {
   const service = new ApplicationsService(
     applications as never,
     renders as never,
-    {} as never,
-    {} as never,
+    { get: jest.fn(async () => ({ job: { id: 'j1', title: 'App Developer', parsed: {} } })) } as never,
+    {
+      getVersion: jest.fn(async () => ({
+        master: { markdown: '# Jane Doe\n\njane@example.com\n\n## Experience\n' },
+        facts: [],
+      })),
+    } as never,
     {} as never,
     {} as never,
     {} as never,
