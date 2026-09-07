@@ -15,9 +15,7 @@ import { StorageModule } from '../storage/storage.module';
 import { AccountDeletionService } from './account-deletion.service';
 import { DataExportService } from './data-export.service';
 import {
-  AUTH_USER_LOOKUP_SERVICE_NAME,
   AUTH_USER_LOOKUP_BEARER,
-  AUTH_USER_LOOKUP_TOKEN,
   AUTH_USER_LOOKUP_URL,
   HttpIdentityProvider,
   IDENTITY_PROVIDER,
@@ -57,29 +55,17 @@ import { RetentionService } from './retention.service';
       useFactory: (config: ConfigService): string | null => config.get<string>('AUTH_USER_LOOKUP_URL') ?? null,
     },
     {
-      provide: AUTH_USER_LOOKUP_TOKEN,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): string | null => config.get<string>('AUTH_USER_LOOKUP_TOKEN') ?? null,
-    },
-    {
       provide: AUTH_USER_LOOKUP_BEARER,
       inject: [ConfigService],
       useFactory: (config: ConfigService): string | null => config.get<string>('AUTH_USER_LOOKUP_BEARER') ?? null,
     },
     {
-      provide: AUTH_USER_LOOKUP_SERVICE_NAME,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): string => config.get<string>('AUTH_USER_LOOKUP_SERVICE_NAME') ?? 'cv-tuning',
-    },
-    {
       provide: IDENTITY_PROVIDER,
-      inject: [AUTH_USER_LOOKUP_URL, AUTH_USER_LOOKUP_TOKEN, AUTH_USER_LOOKUP_BEARER, AUTH_USER_LOOKUP_SERVICE_NAME],
+      inject: [AUTH_USER_LOOKUP_URL, AUTH_USER_LOOKUP_BEARER],
       useFactory: (
         lookupUrl: string | null,
-        lookupToken: string | null,
         lookupBearer: string | null,
-        serviceName: string,
-      ): IdentityProviderPort => new HttpIdentityProvider(lookupUrl, lookupToken, lookupBearer, serviceName),
+      ): IdentityProviderPort => new HttpIdentityProvider(lookupUrl, lookupBearer),
     },
   ],
 })

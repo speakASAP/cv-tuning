@@ -1,11 +1,10 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { pseudonymizePrompt } from './pseudonymize';
-import { base64url, mintServiceToken } from './service-token';
 
 export const AI_FETCH = 'CV_AI_FETCH';
 export const AI_SERVICE_URL = 'CV_AI_SERVICE_URL';
-export const AI_JWT_SECRET = 'CV_AI_JWT_SECRET';
-export const AI_JWT_PRIVATE_KEY = 'CV_AI_JWT_PRIVATE_KEY';
+/** Auth-minted RS256 JWT for svc-cv-tuning--ai-microservice (Vault AI_SERVICE_TOKEN). */
+export const AI_SERVICE_TOKEN = 'CV_AI_SERVICE_TOKEN';
 
 export type AiTier = 'cheap' | 'smart';
 
@@ -44,8 +43,6 @@ const EXPECTED_MODELS: Record<AiTier, readonly string[]> = {
   cheap: ['openrouter/google/gemma-4-26b-a4b-it:free'],
   smart: ['openrouter/google/gemma-4-31b-it:free'],
 };
-
-const SERVICE_ID = 'cv-tuning';
 
 /**
  * The binding constraint is NOT the LiteLLM proxy — it is Cloudflare. cv.alfares.cz is
@@ -95,9 +92,8 @@ export class AiClientService {
 
   constructor(
     @Optional() @Inject(AI_SERVICE_URL) private readonly aiServiceUrl: string = process.env.AI_SERVICE_URL ?? '',
-    @Optional() @Inject(AI_JWT_SECRET) private readonly jwtSecret: string = process.env.CV_AI_JWT_SECRET ?? process.env.JWT_SECRET ?? '',
+    @Optional() @Inject(AI_SERVICE_TOKEN) private readonly aiServiceToken: string = process.env.AI_SERVICE_TOKEN ?? '',
     @Optional() @Inject(AI_FETCH) private readonly fetchImpl: typeof fetch = fetch,
-    @Optional() @Inject(AI_JWT_PRIVATE_KEY) private readonly jwtPrivateKey: string = process.env.CV_AI_JWT_PRIVATE_KEY ?? process.env.JWT_PRIVATE_KEY ?? '',
   ) {}
 
   async complete(input: AiCompletionRequest): Promise<AiCompletion> {
@@ -110,6 +106,7 @@ export class AiClientService {
         `timeout_ms=${timeoutMs} correlation=${input.correlationId ?? 'none'}`,
     );
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const bearer = this.requireServiceToken();
 
     let response: Response;
     try {
@@ -117,7 +114,7 @@ export class AiClientService {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${this.mintServiceToken()}`,
+          authorization: `Bearer ${bearer}`,
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -224,7 +221,11 @@ export class AiClientService {
     return `${prompt}\n\nRespond with JSON matching this schema:\n${JSON.stringify(schema)}`;
   }
 
-  private mintServiceToken(): string {
-    return mintServiceToken(SERVICE_ID, this.jwtPrivateKey, this.jwtSecret);
+  private requireServiceToken(): string {
+    const token = this.aiServiceToken.trim().replace(/^Bearer\s+/i, '');
+    if (!token) {
+      throw new Error('AI_SERVICE_TOKEN is not set; cannot authenticate to ai-microservice');
+    }
+    return token;
   }
 }

@@ -216,23 +216,20 @@ describe('AiClientService', () => {
     expect(AiClientService.ALLOWED_TIERS).toEqual(['cheap', 'smart']);
   });
 
-  it('sends a bearer token whose issuer is ai-microservice, as ServiceAuthGuard requires', async () => {
+  it('sends the Auth-minted AI_SERVICE_TOKEN as Bearer', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: 'x', model_used: SMART_MODEL }) });
 
     await client.complete({ tier: 'smart', systemPrompt: 's', userPrompt: 'x' });
 
     const headers = (fetchMock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
-    const token = headers.authorization.replace('Bearer ', '');
-    const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
-    expect(claims.iss).toBe('ai-microservice');
-    expect(claims.serviceId).toBe('cv-tuning');
+    expect(headers.authorization).toBe('Bearer test-secret');
   });
 
-  it('raises rather than calling unauthenticated when no secret is configured', async () => {
+  it('raises rather than calling unauthenticated when AI_SERVICE_TOKEN is unset', async () => {
     const unconfigured = new AiClientService('http://ai:3380', '', fetchMock as unknown as typeof fetch);
 
     await expect(unconfigured.complete({ tier: 'cheap', systemPrompt: 's', userPrompt: 'x' })).rejects.toThrow(
-      /JWT_SECRET/,
+      /AI_SERVICE_TOKEN/,
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });

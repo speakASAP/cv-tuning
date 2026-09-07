@@ -1,8 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { AI_FETCH, AI_JWT_PRIVATE_KEY, AI_JWT_SECRET, AI_SERVICE_URL } from './ai-client.service';
-import { mintServiceToken } from './service-token';
-
-const SERVICE_ID = 'cv-tuning';
+import { AI_FETCH, AI_SERVICE_TOKEN, AI_SERVICE_URL } from './ai-client.service';
 
 /**
  * Above ai-microservice's own OCR budget: a scanned CV is rasterised and recognised page by
@@ -33,15 +30,15 @@ export class DocumentsClientService {
 
   constructor(
     @Optional() @Inject(AI_SERVICE_URL) private readonly aiServiceUrl: string = process.env.AI_SERVICE_URL ?? '',
-    @Optional() @Inject(AI_JWT_SECRET) private readonly jwtSecret: string = process.env.CV_AI_JWT_SECRET ?? process.env.JWT_SECRET ?? '',
+    @Optional() @Inject(AI_SERVICE_TOKEN) private readonly aiServiceToken: string = process.env.AI_SERVICE_TOKEN ?? '',
     @Optional() @Inject(AI_FETCH) private readonly fetchImpl: typeof fetch = fetch,
-    @Optional() @Inject(AI_JWT_PRIVATE_KEY) private readonly jwtPrivateKey: string = process.env.CV_AI_JWT_PRIVATE_KEY ?? process.env.JWT_PRIVATE_KEY ?? '',
   ) {}
 
   async extract(buffer: Buffer, mimeType: string, filename: string): Promise<ExtractedDocument> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const startedAt = Date.now();
+    const bearer = this.requireServiceToken();
 
     let response: Response;
     try {
@@ -49,7 +46,7 @@ export class DocumentsClientService {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${mintServiceToken(SERVICE_ID, this.jwtPrivateKey, this.jwtSecret)}`,
+          authorization: `Bearer ${bearer}`,
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -78,29 +75,32 @@ export class DocumentsClientService {
     const payload = (await response.json()) as Partial<ExtractedDocument>;
     const text = payload.text ?? '';
     if (text.trim().length === 0) {
-      throw new Error('the document service returned no text for this file');
+      this.logger.error(`document extraction returned empty text after ${Date.now() - startedAt}ms`);
+      throw new Error('document extraction returned empty text');
     }
-
-    this.logger.log(
-      `extracted ${filename} engine=${payload.engine} ocr=${payload.ocrUsed} ` +
-        `pages=${payload.pages} chars=${text.length} in ${Date.now() - startedAt}ms`,
-    );
 
     return {
       text,
       engine: payload.engine ?? 'unknown',
       ocrUsed: payload.ocrUsed === true,
-      pages: payload.pages ?? 0,
+      pages: typeof payload.pages === 'number' ? payload.pages : 0,
     };
+  }
+
+  private requireServiceToken(): string {
+    const token = this.aiServiceToken.trim().replace(/^Bearer\s+/i, '');
+    if (!token) {
+      throw new Error('AI_SERVICE_TOKEN is not set; cannot authenticate to ai-microservice');
+    }
+    return token;
   }
 
   private detail(body: string): string {
     try {
-      const parsed = JSON.parse(body) as { message?: string | string[] };
-      const message = Array.isArray(parsed.message) ? parsed.message.join('; ') : parsed.message;
-      return message ?? body.slice(0, 200);
+      const parsed = JSON.parse(body) as { message?: string; error?: string };
+      return parsed.message || parsed.error || body.slice(0, 300);
     } catch {
-      return body.slice(0, 200);
+      return body.slice(0, 300);
     }
   }
 }

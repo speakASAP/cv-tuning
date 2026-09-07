@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AI_JWT_SECRET, AI_SERVICE_URL, AiClientService } from './ai-client.service';
+import { AI_SERVICE_TOKEN, AI_SERVICE_URL, AiClientService } from './ai-client.service';
 import { DocumentsClientService } from './documents-client.service';
 
 @Module({
@@ -16,15 +16,14 @@ import { DocumentsClientService } from './documents-client.service';
       },
     },
     {
-      provide: AI_JWT_SECRET,
+      provide: AI_SERVICE_TOKEN,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-        if (!secret) {
-          // /ai/complete sits behind ServiceAuthGuard; without this every call 401s.
-          throw new Error('JWT_SECRET is not set; cannot authenticate to ai-microservice');
+        const token = config.get<string>('AI_SERVICE_TOKEN');
+        if (!token) {
+          throw new Error('AI_SERVICE_TOKEN is not set; cannot authenticate to ai-microservice');
         }
-        return secret;
+        return token;
       },
     },
     AiClientService,

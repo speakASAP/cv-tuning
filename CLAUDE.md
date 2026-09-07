@@ -45,12 +45,12 @@ The grounding eval is **not** a test and must never be run in CI (it spends real
 against live models and self-guards on `CI`):
 
 ```bash
-rtk npx ts-node src/applications/__evals__/run-eval.ts   # needs CV_AI_SERVICE_URL + CV_AI_JWT_SECRET
+rtk npx ts-node src/applications/__evals__/run-eval.ts   # needs CV_AI_SERVICE_URL + AI_SERVICE_TOKEN
 ```
 
-`CV_AI_JWT_SECRET` carries the Auth-issued `cv-tuning -> ai-microservice` credential defined by
+`AI_SERVICE_TOKEN` is the Auth-issued `cv-tuning -> ai-microservice` credential defined by
 [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
-Never sign one locally and never reuse another service's secret.
+Never mint or sign one locally and never reuse another service's secret.
 
 Run it before and after any edit to `tailor.prompt.ts` or `entail.prompt.ts` and diff the
 tables — it is the only regression net for prompt changes. The current baseline is recorded in
@@ -65,7 +65,7 @@ workload across `cheap`/`smart`/`premium` on five real, externally-supplied CVs 
 
 ```bash
 rtk npx ts-node src/applications/__evals__/benchmark-run.ts
-# needs CV_AI_SERVICE_URL, CV_AI_JWT_SECRET, CV_BENCHMARK_FIXTURES_DIR (5 fixture JSON
+# needs CV_AI_SERVICE_URL, AI_SERVICE_TOKEN, CV_BENCHMARK_FIXTURES_DIR (5 fixture JSON
 # files, never committed); CV_BENCHMARK_PREMIUM_MODELS is optional and premium is
 # reported "skipped" without it. Full fixture format, consent requirement, and output
 # handling: docs/evals/2026-08-28-phase-8-benchmark.md

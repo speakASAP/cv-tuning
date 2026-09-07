@@ -3,15 +3,11 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 export const IDENTITY_PROVIDER = 'CV_IDENTITY_PROVIDER';
 export const AUTH_USER_LOOKUP_URL = 'CV_AUTH_USER_LOOKUP_URL';
 export const IDP_FETCH = 'CV_IDP_FETCH';
-export const AUTH_USER_LOOKUP_TOKEN = 'CV_AUTH_USER_LOOKUP_TOKEN';
 /**
  * Per-pair Auth-issued RS256 credential for `svc-cv-tuning--auth-microservice`,
- * holding `internal:auth-microservice:user-existence`. This is what the service
- * identity standard requires; AUTH_USER_LOOKUP_TOKEN is the shared static token
- * it replaces and is sent only while auth still accepts it.
+ * holding `internal:auth-microservice:user-existence`.
  */
 export const AUTH_USER_LOOKUP_BEARER = 'CV_AUTH_USER_LOOKUP_BEARER';
-export const AUTH_USER_LOOKUP_SERVICE_NAME = 'CV_AUTH_USER_LOOKUP_SERVICE_NAME';
 
 const LOOKUP_TIMEOUT_MS = 3000;
 
@@ -38,8 +34,9 @@ export interface IdentityProviderPort {
 }
 
 /**
- * Default provider. Reads an OPTIONAL `AUTH_USER_LOOKUP_URL`. When unset it is unavailable and
- * every lookup returns `null`, so the offboarding job stays safely blocked. A configured GET of
+ * Default provider. Reads OPTIONAL `AUTH_USER_LOOKUP_URL` + Auth Bearer
+ * `AUTH_USER_LOOKUP_BEARER`. When either is unset it is unavailable and every lookup
+ * returns `null`, so the offboarding job stays safely blocked. A configured GET of
  * `${lookupUrl}/${userId}` is read as: 200 → exists, 404 → confirmed gone, anything else → `null`.
  */
 @Injectable()
@@ -48,35 +45,33 @@ export class HttpIdentityProvider implements IdentityProviderPort {
 
   constructor(
     @Optional() @Inject(AUTH_USER_LOOKUP_URL) private readonly lookupUrl: string | null = null,
-    @Optional() @Inject(AUTH_USER_LOOKUP_TOKEN) private readonly lookupToken: string | null = null,
     @Optional() @Inject(AUTH_USER_LOOKUP_BEARER) private readonly lookupBearer: string | null = null,
-    @Optional() @Inject(AUTH_USER_LOOKUP_SERVICE_NAME) private readonly serviceName = 'cv-tuning',
     @Optional() @Inject(IDP_FETCH) private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
   get available(): boolean {
-    return !!this.lookupUrl;
+    return !!this.lookupUrl && !!this.lookupBearer;
   }
 
   async userExists(userId: string): Promise<boolean | null> {
-    if (!this.lookupUrl) {
+    if (!this.lookupUrl || !this.lookupBearer) {
       return null;
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
+    const bearer = this.lookupBearer.trim().replace(/^Bearer\s+/i, '');
+    if (!bearer) {
+      this.logger.error('identity-provider AUTH_USER_LOOKUP_BEARER is empty; treating lookup as unresolved');
+      return null;
+    }
 
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.lookupUrl}/${encodeURIComponent(userId)}`, {
         method: 'GET',
         headers: {
-          // Auth tries the bearer first and identifies this caller as its own
-          // principal. The two legacy headers are the migration window only, and
-          // are dropped once auth sets ALLOW_INTERNAL_STATIC_TOKEN=false.
-          ...(this.lookupBearer ? { authorization: `Bearer ${this.lookupBearer}` } : {}),
-          ...(this.lookupToken ? { 'x-internal-service-token': this.lookupToken } : {}),
-          'x-service-name': this.serviceName,
+          authorization: `Bearer ${bearer}`,
         },
         signal: controller.signal,
       });

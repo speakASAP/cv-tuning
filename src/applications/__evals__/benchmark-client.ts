@@ -17,10 +17,8 @@
  * detection closely enough that the three tiers are measured on a level playing field, but
  * it is a deliberate, documented duplication — not a shared abstraction — so a change to
  * the production client's auth or retry behaviour cannot silently change what Phase 8
- * measured. If `mintServiceToken`'s HMAC scheme in `ai-client.service.ts` ever changes,
- * update the copy below too.
+ * measured. Auth uses the same Auth-minted `AI_SERVICE_TOKEN` as production.
  */
-import { createHmac, createSign } from 'crypto';
 import { pseudonymizePrompt } from '../../ai/pseudonymize';
 
 export type BenchmarkTier = 'cheap' | 'smart' | 'premium';
@@ -40,17 +38,10 @@ const FREE_TIER_MODELS: Record<'cheap' | 'smart', readonly string[]> = {
   smart: ['openrouter/google/gemma-4-31b-it:free'],
 };
 
-const TOKEN_ISSUER = 'ai-microservice';
-const SERVICE_ID = 'cv-tuning';
-const TOKEN_TTL_SECONDS = 900;
-
 /** Same floor as `ai-client.service.ts`'s `DEFAULT_TIMEOUT_MS`, for the same reason: it
  * must stay above the LiteLLM proxy's own `request_timeout` (120s) or the fallback chain
  * never runs. */
 const DEFAULT_TIMEOUT_MS = 150_000;
-
-const base64url = (input: Buffer | string): string =>
-  Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 export interface BenchmarkCompletionRequest {
   tier: BenchmarkTier;
@@ -97,8 +88,8 @@ export class PremiumNotConfiguredError extends Error {
 
 export interface BenchmarkAiClientOptions {
   aiServiceUrl: string;
-  jwtSecret?: string;
-  jwtPrivateKey?: string;
+  /** Auth-minted RS256 JWT (AI_SERVICE_TOKEN). */
+  aiServiceToken: string;
   fetchImpl?: typeof fetch;
   /**
    * Comma-separated model ids expected to serve `premium`, e.g.
@@ -110,15 +101,13 @@ export interface BenchmarkAiClientOptions {
 
 export class BenchmarkAiClientService {
   private readonly aiServiceUrl: string;
-  private readonly jwtSecret: string;
+  private readonly aiServiceToken: string;
   private readonly fetchImpl: typeof fetch;
   private readonly premiumModels: readonly string[];
-  private readonly jwtPrivateKey: string;
 
   constructor(options: BenchmarkAiClientOptions) {
     this.aiServiceUrl = options.aiServiceUrl;
-    this.jwtSecret = options.jwtSecret ?? '';
-    this.jwtPrivateKey = options.jwtPrivateKey ?? '';
+    this.aiServiceToken = options.aiServiceToken ?? '';
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.premiumModels = options.premiumModels ?? [];
   }
@@ -149,7 +138,7 @@ export class BenchmarkAiClientService {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${this.mintServiceToken()}`,
+          authorization: `Bearer ${this.requireServiceToken()}`,
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -222,29 +211,11 @@ export class BenchmarkAiClientService {
     return `${prompt}\n\nRespond with JSON matching this schema:\n${JSON.stringify(schema)}`;
   }
 
-  private mintServiceToken(): string {
-    if (this.jwtPrivateKey) {
-      const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-      const now = Math.floor(Date.now() / 1000);
-      const payload = base64url(
-        JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
-      );
-      const signature = base64url(
-        createSign('RSA-SHA256').update(`${header}.${payload}`).sign(this.jwtPrivateKey),
-      );
-      return `${header}.${payload}.${signature}`;
+  private requireServiceToken(): string {
+    const token = this.aiServiceToken.trim().replace(/^Bearer\s+/i, '');
+    if (!token) {
+      throw new Error('AI_SERVICE_TOKEN is not set; cannot authenticate to ai-microservice');
     }
-
-    if (!this.jwtSecret) {
-      throw new Error('CV_AI_JWT_SECRET or CV_AI_JWT_PRIVATE_KEY is not set; cannot authenticate to ai-microservice');
-    }
-
-    const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const now = Math.floor(Date.now() / 1000);
-    const payload = base64url(
-      JSON.stringify({ serviceId: SERVICE_ID, iss: TOKEN_ISSUER, iat: now, exp: now + TOKEN_TTL_SECONDS }),
-    );
-    const signature = base64url(createHmac('sha256', this.jwtSecret).update(`${header}.${payload}`).digest());
-    return `${header}.${payload}.${signature}`;
+    return token;
   }
 }

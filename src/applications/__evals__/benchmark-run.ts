@@ -24,9 +24,8 @@
  * fixture format, consent, and privacy requirements):
  *   - Exactly five fixture JSON files in CV_BENCHMARK_FIXTURES_DIR, each derived from a real
  *     CV whose owner has given current, recorded consent to this specific processing.
- *   - CV_AI_SERVICE_URL plus either CV_AI_JWT_SECRET or CV_AI_JWT_PRIVATE_KEY, same
- *     contract as run-eval.ts. The AI service validates RS256 tokens against JWT_PUBLIC_KEY
- *     when it is configured and falls back to HS256 only when ALLOW_HS256_FALLBACK is open.
+ *   - CV_AI_SERVICE_URL plus AI_SERVICE_TOKEN (Auth-minted RS256), same
+ *     contract as run-eval.ts / production AiClientService.
  *   - CV_BENCHMARK_PREMIUM_MODELS (optional): comma-separated model id(s) upstream will
  *     actually serve `premium` with. Omit it and premium is skipped, not faked.
  *
@@ -270,12 +269,11 @@ async function main(): Promise<void> {
   }
 
   const url = process.env.CV_AI_SERVICE_URL;
-  const secret = process.env.CV_AI_JWT_SECRET;
-  const privateKey = process.env.CV_AI_JWT_PRIVATE_KEY ?? process.env.JWT_PRIVATE_KEY;
+  const token = process.env.AI_SERVICE_TOKEN || process.env.CV_AI_SERVICE_TOKEN;
   const fixturesDir = process.env.CV_BENCHMARK_FIXTURES_DIR;
-  if (!url || (!secret && !privateKey) || !fixturesDir) {
+  if (!url || !token || !fixturesDir) {
     throw new Error(
-      'CV_AI_SERVICE_URL, one of CV_AI_JWT_SECRET or CV_AI_JWT_PRIVATE_KEY, and CV_BENCHMARK_FIXTURES_DIR are all required; ' +
+      'CV_AI_SERVICE_URL, AI_SERVICE_TOKEN, and CV_BENCHMARK_FIXTURES_DIR are all required; ' +
         'see docs/evals/2026-08-28-phase-8-benchmark.md',
     );
   }
@@ -292,8 +290,7 @@ async function main(): Promise<void> {
   const fixtures = loadBenchmarkFixtures(fixturesDir);
   const ai = new BenchmarkAiClientService({
     aiServiceUrl: url,
-    jwtSecret: secret,
-    jwtPrivateKey: privateKey,
+    aiServiceToken: token,
     premiumModels,
   });
 

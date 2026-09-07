@@ -25,9 +25,7 @@
  *
  * Environment required by AiClientService:
  *   - CV_AI_SERVICE_URL   Base URL of a reachable ai-microservice.
- *   - CV_AI_JWT_SECRET    MANDATORY. /ai/complete is behind ServiceAuthGuard; the client
- *                         mints its own service token and fails closed without this.
- *                         Must match ai-microservice's own JWT_SECRET.
+ *   - AI_SERVICE_TOKEN    Auth-minted RS256 JWT for svc-cv-tuning--ai-microservice.
  *
  * ts-node is not a declared devDependency; npx fetches it on demand.
  */
@@ -291,12 +289,12 @@ async function main(): Promise<void> {
   }
 
   const url = process.env.CV_AI_SERVICE_URL;
-  const secret = process.env.CV_AI_JWT_SECRET;
-  if (!url || !secret) {
-    throw new Error('CV_AI_SERVICE_URL and CV_AI_JWT_SECRET are required');
+  const token = process.env.AI_SERVICE_TOKEN || process.env.CV_AI_SERVICE_TOKEN;
+  if (!url || !token) {
+    throw new Error('CV_AI_SERVICE_URL and AI_SERVICE_TOKEN are required');
   }
 
-  const ai = new AiClientService(url, secret, fetch);
+  const ai = new AiClientService(url, token, fetch);
   const tailor = new TailorService(ai);
   const entail = new EntailService(ai);
   const revise = new ReviseService(ai);
