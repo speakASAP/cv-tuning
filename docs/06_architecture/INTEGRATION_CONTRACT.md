@@ -10,7 +10,7 @@ The machine-readable decisions live in `ips-adoption.json`. This document adds t
 
 | Capability | Component | Decision | Contract/API/event | Configuration | Failure mode | Validation evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Auth | `auth-microservice` | required | User access and consent enforcement | Service token or authenticated user session | Access denied and no draft generation for unauthorized flows | User access and consent checks pass |
+| Auth | `auth-microservice` | required | Hosted/user JWT standards; machine callers use [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) | Per SPOT / hosted Auth consumer config | Access denied and no draft generation for unauthorized flows | User access and consent checks pass |
 | PostgreSQL | `db-server-postgres` | required | Durable relational state for CV, application, consent, and export metadata | Service database configuration and migrations | Service fails closed and surfaces storage errors | DB-backed lifecycle tests pass |
 | Redis | `db-server-redis` | required | Caching and workflow state coordination | Shared Redis configuration | Temporary degradation with graceful fallback | Key workflow tests remain stable |
 | Logging | `logging-microservice` | required | Structured log payloads to the shared logging endpoint | Central service metadata and log shape | Service logs remain available but operation continues with degraded visibility | Log emission and monitoring checks are recorded |
@@ -36,9 +36,9 @@ The machine-readable decisions live in `ips-adoption.json`. This document adds t
 
 ## Authentication and authorization
 
-- User authentication is enforced through the shared auth boundary.
+- User authentication is enforced through the shared auth boundary ([`HOSTED_AUTH_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/HOSTED_AUTH_CONSUMER_STANDARD.md) / [`CONSUMER_JWT_VALIDATION_STANDARD.md`](../../../auth-microservice/docs/CONSUMER_JWT_VALIDATION_STANDARD.md)).
 - Consent gating remains part of the application workflow before third-party access is allowed.
-- Service-to-service calls remain locked to the approved ecosystem boundary and tokens.
+- Service-to-service calls follow [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) only.
 
 ## Synchronous dependencies
 
